@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package app
@@ -53,6 +53,7 @@ func Setup() *TestHelper {
 		NewServer()
 		InitStores()
 		StartServer()
+		utils.InitHTML()
 		utils.EnableDebugLogForTest()
 		Srv.Store.MarkSystemRanUnitTests()
 
@@ -72,6 +73,14 @@ func (me *TestHelper) InitBasic() *TestHelper {
 	me.BasicPost = me.CreatePost(me.BasicChannel)
 
 	return me
+}
+
+func (me *TestHelper) MakeUsername() string {
+	return "un_" + model.NewId()
+}
+
+func (me *TestHelper) MakeEmail() string {
+	return "success_" + model.NewId() + "@simulator.amazonses.com"
 }
 
 func (me *TestHelper) CreateTeam() *model.Team {
@@ -173,7 +182,7 @@ func (me *TestHelper) CreatePost(channel *model.Channel) *model.Post {
 func LinkUserToTeam(user *model.User, team *model.Team) {
 	utils.DisableDebugLogForTest()
 
-	err := JoinUserToTeam(team, user)
+	err := JoinUserToTeam(team, user, "")
 	if err != nil {
 		l4g.Error(err.Error())
 		l4g.Close()

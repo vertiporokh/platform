@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import $ from 'jquery';
@@ -19,14 +19,15 @@ import UserStore from 'stores/user_store.jsx';
 import ChannelStore from 'stores/channel_store.jsx';
 import TeamStore from 'stores/team_store.jsx';
 import PreferenceStore from 'stores/preference_store.jsx';
+import SearchStore from 'stores/search_store.jsx';
 
 import ChannelSwitchModal from './channel_switch_modal.jsx';
 
-import Client from 'client/web_client.jsx';
-import * as AsyncClient from 'utils/async_client.jsx';
 import * as Utils from 'utils/utils.jsx';
 import * as ChannelUtils from 'utils/channel_utils.jsx';
 import * as ChannelActions from 'actions/channel_actions.jsx';
+import * as GlobalActions from 'actions/global_actions.jsx';
+import {getPinnedPosts} from 'actions/post_actions.jsx';
 
 import Constants from 'utils/constants.jsx';
 const ActionTypes = Constants.ActionTypes;
@@ -37,7 +38,7 @@ import {FormattedMessage} from 'react-intl';
 
 import {Popover, OverlayTrigger} from 'react-bootstrap';
 
-import {Link, browserHistory} from 'react-router/es6';
+import {Link} from 'react-router/es6';
 
 import React from 'react';
 
@@ -62,6 +63,9 @@ export default class Navbar extends React.Component {
 
         this.showChannelSwitchModal = this.showChannelSwitchModal.bind(this);
         this.hideChannelSwitchModal = this.hideChannelSwitchModal.bind(this);
+
+        this.openDirectMessageModal = this.openDirectMessageModal.bind(this);
+        this.getPinnedPosts = this.getPinnedPosts.bind(this);
 
         const state = this.getStateFromStores();
         state.showEditChannelPurposeModal = false;
@@ -93,6 +97,7 @@ export default class Navbar extends React.Component {
         ChannelStore.addChangeListener(this.onChange);
         ChannelStore.addStatsChangeListener(this.onChange);
         UserStore.addStatusesChangeListener(this.onChange);
+        UserStore.addChangeListener(this.onChange);
         PreferenceStore.addChangeListener(this.onChange);
         $('.inner-wrap').click(this.hideSidebars);
         document.addEventListener('keydown', this.showChannelSwitchModal);
@@ -102,6 +107,7 @@ export default class Navbar extends React.Component {
         ChannelStore.removeChangeListener(this.onChange);
         ChannelStore.removeStatsChangeListener(this.onChange);
         UserStore.removeStatusesChangeListener(this.onChange);
+        UserStore.removeChangeListener(this.onChange);
         PreferenceStore.removeChangeListener(this.onChange);
         document.removeEventListener('keydown', this.showChannelSwitchModal);
     }
@@ -111,23 +117,7 @@ export default class Navbar extends React.Component {
     }
 
     handleLeave() {
-        var channelId = this.state.channel.id;
-
-        Client.leaveChannel(channelId,
-            () => {
-                ChannelActions.loadChannelsForCurrentUser();
-
-                if (this.state.isFavorite) {
-                    ChannelActions.unmarkFavorite(channelId);
-                }
-
-                const townsquare = ChannelStore.getByName('town-square');
-                browserHistory.push(TeamStore.getCurrentTeamRelativeUrl() + '/channels/' + townsquare.name);
-            },
-            (err) => {
-                AsyncClient.dispatchError(err, 'handleLeave');
-            }
-        );
+        ChannelActions.leaveChannel(this.state.channel.id);
     }
 
     hideSidebars(e) {
@@ -222,6 +212,23 @@ export default class Navbar extends React.Component {
         });
     }
 
+    openDirectMessageModal() {
+        AppDispatcher.handleViewAction({
+            type: ActionTypes.TOGGLE_DM_MODAL,
+            value: true,
+            startingUsers: UserStore.getProfileListInChannel(this.state.channel.id, true)
+        });
+    }
+
+    getPinnedPosts(e) {
+        e.preventDefault();
+        if (SearchStore.isPinnedPosts) {
+            GlobalActions.toggleSideBarAction(false);
+        } else {
+            getPinnedPosts(this.state.channel.id);
+        }
+    }
+
     toggleFavorite = (e) => {
         e.preventDefault();
 
@@ -232,24 +239,10 @@ export default class Navbar extends React.Component {
         }
     };
 
-    createDropdown(channel, channelTitle, isAdmin, isSystemAdmin, isDirect, popoverContent) {
+    createDropdown(channel, channelTitle, isAdmin, isSystemAdmin, isChannelAdmin, isDirect, isGroup, popoverContent) {
         if (channel) {
-            let channelTerm = (
-                <FormattedMessage
-                    id='channel_header.channel'
-                    defaultMessage='Channel'
-                />
-                );
-            if (channel.type === Constants.PRIVATE_CHANNEL) {
-                channelTerm = (
-                    <FormattedMessage
-                        id='channel_header.group'
-                        defaultMessage='Group'
-                    />
-                );
-            }
-
             let viewInfoOption;
+            let viewPinnedPostsOption;
             let addMembersOption;
             let manageMembersOption;
             let setChannelHeaderOption;
@@ -274,6 +267,57 @@ export default class Navbar extends React.Component {
                         </a>
                     </li>
                 );
+            } else if (isGroup) {
+                setChannelHeaderOption = (
+                    <li role='presentation'>
+                        <a
+                            role='menuitem'
+                            href='#'
+                            onClick={this.showEditChannelHeaderModal}
+                        >
+                            <FormattedMessage
+                                id='channel_header.channelHeader'
+                                defaultMessage='Set Channel Header...'
+                            />
+                        </a>
+                    </li>
+                );
+
+                notificationPreferenceOption = (
+                    <li role='presentation'>
+                        <ToggleModalButton
+                            role='menuitem'
+                            dialogType={ChannelNotificationsModal}
+                            dialogProps={{
+                                channel,
+                                channelMember: this.state.member,
+                                currentUser: this.state.currentUser
+                            }}
+                        >
+                            <FormattedMessage
+                                id='navbar.preferences'
+                                defaultMessage='Notification Preferences'
+                            />
+                        </ToggleModalButton>
+                    </li>
+                );
+
+                addMembersOption = (
+                    <li
+                        role='presentation'
+                    >
+                        <a
+                            role='menuitem'
+                            href='#'
+                            onClick={this.openDirectMessageModal}
+                        >
+                            <FormattedMessage
+                                id='navbar.addMembers'
+                                defaultMessage='Add Members'
+                            />
+                        </a>
+                    </li>
+                );
             } else {
                 viewInfoOption = (
                     <li role='presentation'>
@@ -290,10 +334,26 @@ export default class Navbar extends React.Component {
                     </li>
                 );
 
+                viewPinnedPostsOption = (
+                    <li role='presentation'>
+                        <a
+                            role='menuitem'
+                            href='#'
+                            onClick={this.getPinnedPosts}
+                        >
+                            <FormattedMessage
+                                id='navbar.viewPinnedPosts'
+                                defaultMessage='View Pinned Posts'
+                            />
+                        </a>
+                    </li>
+                );
+
                 if (!ChannelStore.isDefault(channel)) {
                     addMembersOption = (
                         <li role='presentation'>
                             <ToggleModalButton
+                                ref='channelInviteModalButton'
                                 role='menuitem'
                                 dialogType={ChannelInviteModal}
                                 dialogProps={{channel, currentUser: this.state.currentUser}}
@@ -364,7 +424,7 @@ export default class Navbar extends React.Component {
                     </li>
                 );
 
-                if (ChannelUtils.showManagementOptions(channel, isAdmin, isSystemAdmin)) {
+                if (ChannelUtils.showManagementOptions(channel, isAdmin, isSystemAdmin, isChannelAdmin)) {
                     setChannelHeaderOption = (
                         <li role='presentation'>
                             <a
@@ -374,10 +434,7 @@ export default class Navbar extends React.Component {
                             >
                                 <FormattedMessage
                                     id='channel_header.setHeader'
-                                    defaultMessage='Set {term} Header...'
-                                    values={{
-                                        term: (channelTerm)
-                                    }}
+                                    defaultMessage='Edit Channel Header'
                                 />
                             </a>
                         </li>
@@ -392,10 +449,7 @@ export default class Navbar extends React.Component {
                             >
                                 <FormattedMessage
                                     id='channel_header.setPurpose'
-                                    defaultMessage='Set {term} Purpose...'
-                                    values={{
-                                        term: (channelTerm)
-                                    }}
+                                    defaultMessage='Edit Channel Purpose'
                                 />
                             </a>
                         </li>
@@ -410,17 +464,14 @@ export default class Navbar extends React.Component {
                             >
                                 <FormattedMessage
                                     id='channel_header.rename'
-                                    defaultMessage='Rename {term}...'
-                                    values={{
-                                        term: (channelTerm)
-                                    }}
+                                    defaultMessage='Rename Channel'
                                 />
                             </a>
                         </li>
                     );
                 }
 
-                if (ChannelUtils.showDeleteOption(channel, isAdmin, isSystemAdmin) || this.state.userCount === 1) {
+                if (ChannelUtils.showDeleteOption(channel, isAdmin, isSystemAdmin, isChannelAdmin) || this.state.userCount === 1) {
                     if (!ChannelStore.isDefault(channel)) {
                         deleteChannelOption = (
                             <li role='presentation'>
@@ -431,10 +482,7 @@ export default class Navbar extends React.Component {
                                 >
                                     <FormattedMessage
                                         id='channel_header.delete'
-                                        defaultMessage='Delete {term}...'
-                                        values={{
-                                            term: (channelTerm)
-                                        }}
+                                        defaultMessage='Delete Channel'
                                     />
                                 </ToggleModalButton>
                             </li>
@@ -453,10 +501,7 @@ export default class Navbar extends React.Component {
                             >
                                 <FormattedMessage
                                     id='channel_header.leave'
-                                    defaultMessage='Leave {term}'
-                                    values={{
-                                        term: (channelTerm)
-                                    }}
+                                    defaultMessage='Leave Channel'
                                 />
                             </a>
                         </li>
@@ -479,10 +524,10 @@ export default class Navbar extends React.Component {
                                 id='channelHeader.removeFromFavorites'
                                 defaultMessage='Remove from Favorites'
                             /> :
-                                <FormattedMessage
-                                    id='channelHeader.addToFavorites'
-                                    defaultMessage='Add to Favorites'
-                                />}
+                            <FormattedMessage
+                                id='channelHeader.addToFavorites'
+                                defaultMessage='Add to Favorites'
+                            />}
                     </a>
                 </li>
             );
@@ -515,6 +560,7 @@ export default class Navbar extends React.Component {
                             role='menu'
                         >
                             {viewInfoOption}
+                            {viewPinnedPostsOption}
                             {notificationPreferenceOption}
                             {addMembersOption}
                             {manageMembersOption}
@@ -635,7 +681,9 @@ export default class Navbar extends React.Component {
         var popoverContent;
         var isAdmin = false;
         var isSystemAdmin = false;
+        var isChannelAdmin = false;
         var isDirect = false;
+        let isGroup = false;
 
         var editChannelHeaderModal = null;
         var editChannelPurposeModal = null;
@@ -665,6 +713,7 @@ export default class Navbar extends React.Component {
 
             isAdmin = TeamStore.isTeamAdminForCurrentTeam() || UserStore.isSystemAdminForCurrentUser();
             isSystemAdmin = UserStore.isSystemAdminForCurrentUser();
+            isChannelAdmin = ChannelStore.isChannelAdminForCurrentChannel();
 
             if (channel.type === 'O') {
                 channelTitle = channel.display_name;
@@ -674,6 +723,9 @@ export default class Navbar extends React.Component {
                 isDirect = true;
                 const teammateId = Utils.getUserIdFromChannelName(channel);
                 channelTitle = Utils.displayUsername(teammateId);
+            } else if (channel.type === Constants.GM_CHANNEL) {
+                isGroup = true;
+                channelTitle = ChannelUtils.buildGroupChannelName(channel.id);
             }
 
             if (channel.header.length === 0) {
@@ -745,6 +797,7 @@ export default class Navbar extends React.Component {
                     <ChannelMembersModal
                         show={true}
                         onModalDismissed={this.hideMembersModal}
+                        showInviteModal={() => this.refs.channelInviteModalButton.show()}
                         channel={channel}
                         isAdmin={isAdmin}
                     />
@@ -771,7 +824,7 @@ export default class Navbar extends React.Component {
             </button>
         );
 
-        var channelMenuDropdown = this.createDropdown(channel, channelTitle, isAdmin, isSystemAdmin, isDirect, popoverContent);
+        var channelMenuDropdown = this.createDropdown(channel, channelTitle, isAdmin, isSystemAdmin, isChannelAdmin, isDirect, isGroup, popoverContent);
 
         return (
             <div>

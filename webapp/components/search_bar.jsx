@@ -1,10 +1,7 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
-import $ from 'jquery';
 import ReactDOM from 'react-dom';
-import Client from 'client/web_client.jsx';
-import * as AsyncClient from 'utils/async_client.jsx';
 import * as GlobalActions from 'actions/global_actions.jsx';
 import SearchStore from 'stores/search_store.jsx';
 import UserStore from 'stores/user_store.jsx';
@@ -15,7 +12,7 @@ import SearchSuggestionList from './suggestion/search_suggestion_list.jsx';
 import SearchUserProvider from './suggestion/search_user_provider.jsx';
 import * as Utils from 'utils/utils.jsx';
 import Constants from 'utils/constants.jsx';
-import {loadProfilesForPosts, getFlaggedPosts} from 'actions/post_actions.jsx';
+import {getFlaggedPosts, performSearch} from 'actions/post_actions.jsx';
 
 import {FormattedMessage, FormattedHTMLMessage} from 'react-intl';
 
@@ -32,14 +29,18 @@ export default class SearchBar extends React.Component {
         this.onListenerChange = this.onListenerChange.bind(this);
         this.handleChange = this.handleChange.bind(this);
         this.handleUserFocus = this.handleUserFocus.bind(this);
+        this.handleClear = this.handleClear.bind(this);
         this.handleUserBlur = this.handleUserBlur.bind(this);
-        this.performSearch = this.performSearch.bind(this);
+        this.handleSearch = this.handleSearch.bind(this);
+        this.handleSearchOnSuccess = this.handleSearchOnSuccess.bind(this);
+        this.handleSearchOnError = this.handleSearchOnError.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
         this.searchMentions = this.searchMentions.bind(this);
         this.getFlagged = this.getFlagged.bind(this);
 
         const state = this.getSearchTermStateFromStores();
         state.focused = false;
+        state.isPristine = true;
         this.state = state;
 
         this.suggestionProviders = [new SearchChannelProvider(), new SearchUserProvider()];
@@ -55,6 +56,12 @@ export default class SearchBar extends React.Component {
     componentDidMount() {
         SearchStore.addSearchTermChangeListener(this.onListenerChange);
         this.mounted = true;
+
+        if (Utils.isMobile()) {
+            setTimeout(() => {
+                document.querySelector('.app__body .sidebar--menu').classList.remove('visible');
+            });
+        }
     }
 
     componentWillUnmount() {
@@ -68,18 +75,29 @@ export default class SearchBar extends React.Component {
             if (!Utils.areObjectsEqual(newState, this.state)) {
                 this.setState(newState);
             }
-            if (doSearch) {
-                this.performSearch(newState.searchTerm, isMentionSearch);
+            if (doSearch && newState && newState.searchTerm.length) {
+                performSearch(
+                    newState.searchTerm,
+                    isMentionSearch,
+                    () => {
+                        this.handleSearchOnSuccess();
+                    },
+                    () => {
+                        this.handleSearchOnError();
+                    }
+                );
             }
         }
     }
 
-    clearFocus() {
-        $('.search-bar__container').removeClass('focused');
-    }
-
     handleClose(e) {
         e.preventDefault();
+
+        if (Utils.isMobile()) {
+            setTimeout(() => {
+                document.querySelector('.app__body .sidebar--menu').classList.add('visible');
+            });
+        }
 
         AppDispatcher.handleServerAction({
             type: ActionTypes.RECEIVED_SEARCH,
@@ -110,45 +128,54 @@ export default class SearchBar extends React.Component {
         this.setState({focused: false});
     }
 
-    handleUserFocus() {
-        this.setState({focused: true});
-        $('.search-bar__container').addClass('focused');
+    handleClear() {
+        this.setState({searchTerm: ''});
     }
 
-    performSearch(terms, isMentionSearch) {
-        if (terms.length) {
-            this.setState({isSearching: true});
+    handleUserFocus() {
+        this.setState({focused: true});
+    }
 
-            Client.search(
+    handleSearch(terms, isMentionSearch) {
+        if (terms.length) {
+            this.setState({
+                isSearching: true,
+                isPristine: false
+            });
+
+            performSearch(
                 terms,
                 isMentionSearch,
-                (data) => {
-                    this.setState({isSearching: false});
-                    if (Utils.isMobile()) {
-                        ReactDOM.findDOMNode(this.refs.search).value = '';
-                    }
-
-                    AppDispatcher.handleServerAction({
-                        type: ActionTypes.RECEIVED_SEARCH,
-                        results: data,
-                        is_mention_search: isMentionSearch
-                    });
-
-                    loadProfilesForPosts(data.posts);
+                () => {
+                    this.handleSearchOnSuccess();
                 },
-                (err) => {
-                    this.setState({isSearching: false});
-                    AsyncClient.dispatchError(err, 'search');
+                () => {
+                    this.handleSearchOnError();
                 }
             );
         }
     }
 
+    handleSearchOnSuccess() {
+        if (this.mounted) {
+            this.setState({isSearching: false});
+
+            if (Utils.isMobile() && this.search) {
+                this.search.value = '';
+            }
+        }
+    }
+
+    handleSearchOnError() {
+        if (this.mounted) {
+            this.setState({isSearching: false});
+        }
+    }
+
     handleSubmit(e) {
         e.preventDefault();
-        this.performSearch(this.state.searchTerm.trim());
-        $(ReactDOM.findDOMNode(this.refs.search)).find('input').blur();
-        this.clearFocus();
+        this.handleSearch(this.state.searchTerm.trim());
+        this.search.blur();
     }
 
     searchMentions(e) {
@@ -169,6 +196,25 @@ export default class SearchBar extends React.Component {
         } else {
             getFlaggedPosts();
         }
+    }
+
+    renderHintPopover(helpClass) {
+        if (!this.props.isCommentsPage && Utils.isMobile() && this.state.isPristine) {
+            return false;
+        }
+
+        return (
+            <Popover
+                id='searchbar-help-popup'
+                placement='bottom'
+                className={helpClass}
+            >
+                <FormattedHTMLMessage
+                    id='search_bar.usage'
+                    defaultMessage='<h4>Search Options</h4><ul><li><span>Use </span><b>"quotation marks"</b><span> to search for phrases</span></li><li><span>Use </span><b>from:</b><span> to find posts from specific users and </span><b>in:</b><span> to find posts in specific channels</span></li></ul>'
+                />
+            </Popover>
+        );
     }
 
     render() {
@@ -193,7 +239,10 @@ export default class SearchBar extends React.Component {
         );
 
         const flaggedTooltip = (
-            <Tooltip id='flaggedTooltip'>
+            <Tooltip
+                id='flaggedTooltip'
+                className='text-nowrap'
+            >
                 <FormattedMessage
                     id='channel_header.flagged'
                     defaultMessage='Flagged Posts'
@@ -250,6 +299,11 @@ export default class SearchBar extends React.Component {
             );
         }
 
+        let clearClass = 'sidebar__search-clear';
+        if (!this.state.isSearching && this.state.searchTerm && this.state.searchTerm.trim() !== '') {
+            clearClass += ' visible';
+        }
+
         return (
             <div>
                 <div
@@ -258,15 +312,6 @@ export default class SearchBar extends React.Component {
                 >
                     <span className='fa fa-angle-left'/>
                 </div>
-                <span
-                    className='search__clear'
-                    onClick={this.clearFocus}
-                >
-                    <FormattedMessage
-                        id='search_bar.cancel'
-                        defaultMessage='Cancel'
-                    />
-                </span>
                 <form
                     role='form'
                     className='search__form'
@@ -286,18 +331,21 @@ export default class SearchBar extends React.Component {
                         listComponent={SearchSuggestionList}
                         providers={this.suggestionProviders}
                         type='search'
+                        autoFocus={this.props.isFocus && this.state.searchTerm === ''}
                     />
-                    {isSearching}
-                    <Popover
-                        id='searchbar-help-popup'
-                        placement='bottom'
-                        className={helpClass}
+                    <div
+                        className={clearClass}
+                        onClick={this.handleClear}
                     >
-                        <FormattedHTMLMessage
-                            id='search_bar.usage'
-                            defaultMessage='<h4>Search Options</h4><ul><li><span>Use </span><b>"quotation marks"</b><span> to search for phrases</span></li><li><span>Use </span><b>from:</b><span> to find posts from specific users and </span><b>in:</b><span> to find posts in specific channels</span></li></ul>'
-                        />
-                    </Popover>
+                        <span
+                            className='sidebar__search-clear-x'
+                            aria-hidden='true'
+                        >
+                            {'×'}
+                        </span>
+                    </div>
+                    {isSearching}
+                    {this.renderHintPopover(helpClass)}
                 </form>
 
                 {mentionBtn}
@@ -308,9 +356,12 @@ export default class SearchBar extends React.Component {
 }
 
 SearchBar.defaultProps = {
-    showMentionFlagBtns: true
+    showMentionFlagBtns: true,
+    isFocus: false
 };
 
 SearchBar.propTypes = {
-    showMentionFlagBtns: React.PropTypes.bool
+    showMentionFlagBtns: React.PropTypes.bool,
+    isCommentsPage: React.PropTypes.bool,
+    isFocus: React.PropTypes.bool
 };

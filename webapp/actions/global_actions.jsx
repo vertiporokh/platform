@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import AppDispatcher from 'dispatcher/app_dispatcher.jsx';
@@ -13,10 +13,11 @@ import PreferenceStore from 'stores/preference_store.jsx';
 import SearchStore from 'stores/search_store.jsx';
 
 import {handleNewPost, loadPosts, loadPostsBefore, loadPostsAfter} from 'actions/post_actions.jsx';
-import {loadProfilesAndTeamMembersForDMSidebar} from 'actions/user_actions.jsx';
+import {loadProfilesForSidebar} from 'actions/user_actions.jsx';
 import {loadChannelsForCurrentUser} from 'actions/channel_actions.jsx';
 import {stopPeriodicStatusUpdates} from 'actions/status_actions.jsx';
 import * as WebsocketActions from 'actions/websocket_actions.jsx';
+import {trackEvent} from 'actions/diagnostics_actions.jsx';
 
 import Constants from 'utils/constants.jsx';
 const ActionTypes = Constants.ActionTypes;
@@ -24,11 +25,11 @@ const ActionTypes = Constants.ActionTypes;
 import Client from 'client/web_client.jsx';
 import * as AsyncClient from 'utils/async_client.jsx';
 import WebSocketClient from 'client/web_websocket_client.jsx';
+import {sortTeamsByDisplayName} from 'utils/team_utils.jsx';
 import * as Utils from 'utils/utils.jsx';
 
 import en from 'i18n/en.json';
 import * as I18n from 'i18n/i18n.jsx';
-import {trackPage} from 'actions/analytics_actions.jsx';
 import {browserHistory} from 'react-router/es6';
 
 export function emitChannelClickEvent(channel) {
@@ -46,20 +47,26 @@ export function emitChannelClickEvent(channel) {
     }
     function switchToChannel(chan) {
         const channelMember = ChannelStore.getMyMember(chan.id);
-        const getMyChannelMembersPromise = AsyncClient.getChannelMember(chan.id, UserStore.getCurrentId());
+        const getMyChannelMemberPromise = AsyncClient.getChannelMember(chan.id, UserStore.getCurrentId());
+        const oldChannelId = ChannelStore.getCurrentId();
 
-        getMyChannelMembersPromise.then(() => {
+        getMyChannelMemberPromise.then(() => {
             AsyncClient.getChannelStats(chan.id, true);
-            AsyncClient.viewChannel(chan.id, ChannelStore.getCurrentId());
+            AsyncClient.viewChannel(chan.id, oldChannelId);
             loadPosts(chan.id);
-            trackPage();
         });
 
+        // Subtract mentions for the team
+        const {msgs, mentions} = ChannelStore.getUnreadCounts()[chan.id] || {msgs: 0, mentions: 0};
+        TeamStore.subtractUnread(chan.team_id, msgs, mentions);
+
         // Mark previous and next channel as read
-        ChannelStore.resetCounts(ChannelStore.getCurrentId());
+        ChannelStore.resetCounts(oldChannelId);
         ChannelStore.resetCounts(chan.id);
 
         BrowserStore.setGlobalItem(chan.team_id, chan.id);
+
+        loadProfilesForSidebar();
 
         AppDispatcher.handleViewAction({
             type: ActionTypes.CLICK_CHANNEL,
@@ -68,7 +75,7 @@ export function emitChannelClickEvent(channel) {
             team_id: chan.team_id,
             total_msg_count: chan.total_msg_count,
             channelMember,
-            prev: ChannelStore.getCurrentId()
+            prev: oldChannelId
         });
     }
 
@@ -92,6 +99,22 @@ export function emitInitialLoad(callback) {
             (data) => {
                 global.window.mm_config = data.client_cfg;
                 global.window.mm_license = data.license_cfg;
+
+                if (global.window && global.window.analytics) {
+                    global.window.analytics.identify(global.window.mm_config.DiagnosticId, {}, {
+                        context: {
+                            ip: '0.0.0.0'
+                        },
+                        page: {
+                            path: '',
+                            referrer: '',
+                            search: '',
+                            title: '',
+                            url: ''
+                        },
+                        anonymousId: '00000000000000000000000000'
+                    });
+                }
 
                 UserStore.setNoAccounts(data.no_accounts);
 
@@ -158,7 +181,6 @@ export function doFocusPost(channelId, postId, data) {
         post_list: data
     });
     loadChannelsForCurrentUser();
-    AsyncClient.getMoreChannels(true);
     AsyncClient.getChannelStats(channelId);
     loadPostsBefore(postId, 0, Constants.POST_FOCUS_CONTEXT_RADIUS, true);
     loadPostsAfter(postId, 0, Constants.POST_FOCUS_CONTEXT_RADIUS, true);
@@ -188,7 +210,10 @@ export function emitPostFocusEvent(postId, onSuccess) {
                 link += 'town-square';
             }
 
-            browserHistory.push('/error?message=' + encodeURIComponent(Utils.localizeMessage('permalink.error.access', 'Permalink belongs to a deleted message or to a channel to which you do not have access.')) + '&link=' + encodeURIComponent(link));
+            const message = encodeURIComponent(Utils.localizeMessage('permalink.error.access', 'Permalink belongs to a deleted message or to a channel to which you do not have access.'));
+            const title = encodeURIComponent(Utils.localizeMessage('permalink.error.title', 'Message Not Found'));
+
+            browserHistory.push('/error?message=' + message + '&title=' + title + '&link=' + encodeURIComponent(link));
         }
     );
 }
@@ -379,7 +404,7 @@ export function emitPreferenceChangedEvent(preference) {
     });
 
     if (preference.category === Constants.Preferences.CATEGORY_DIRECT_CHANNEL_SHOW) {
-        loadProfilesAndTeamMembersForDMSidebar();
+        loadProfilesForSidebar();
     }
 }
 
@@ -397,7 +422,7 @@ export function sendEphemeralPost(message, channelId) {
         user_id: '0',
         channel_id: channelId || ChannelStore.getCurrentId(),
         message,
-        type: Constants.POST_TYPE_EPHEMERAL,
+        type: Constants.PostTypes.EPHEMERAL,
         create_at: timestamp,
         update_at: timestamp,
         props: {}
@@ -454,7 +479,9 @@ export function viewLoggedIn() {
 let lastTimeTypingSent = 0;
 export function emitLocalUserTypingEvent(channelId, parentId) {
     const t = Date.now();
-    if ((t - lastTimeTypingSent) > Constants.UPDATE_TYPING_MS) {
+    const membersInChannel = ChannelStore.getStats(channelId).member_count;
+
+    if (((t - lastTimeTypingSent) > global.window.mm_config.TimeBetweenUserTypingUpdatesMilliseconds) && membersInChannel < global.window.mm_config.MaxNotificationsPerChannel && global.window.mm_config.EnableUserTypingMessages === 'true') {
         WebSocketClient.userTyping(channelId, parentId);
         lastTimeTypingSent = t;
     }
@@ -498,7 +525,7 @@ export function clientLogout(redirectTo = '/') {
 
 export function emitSearchMentionsEvent(user) {
     let terms = '';
-    if (user.notify_props && user.notify_props.mention_keys) {
+    if (user.notify_props) {
         const termKeys = UserStore.getMentionKeys(user.id);
 
         if (termKeys.indexOf('@channel') !== -1) {
@@ -511,6 +538,8 @@ export function emitSearchMentionsEvent(user) {
 
         terms = termKeys.join(' ');
     }
+
+    trackEvent('api', 'api_posts_search_mention');
 
     AppDispatcher.handleServerAction({
         type: ActionTypes.RECEIVED_SEARCH_TERM,
@@ -568,7 +597,7 @@ export function redirectUserToDefaultTeam() {
         }
 
         if (myTeams.length > 0) {
-            myTeams = myTeams.sort((a, b) => a.display_name.localeCompare(b.display_name));
+            myTeams = myTeams.sort(sortTeamsByDisplayName);
             teamId = myTeams[0].id;
         }
     }
@@ -594,5 +623,33 @@ export function redirectUserToDefaultTeam() {
         }
     } else {
         browserHistory.push('/select_team');
+    }
+}
+
+requestOpenGraphMetadata.openGraphMetadataOnGoingRequests = {};  // Format: {<url>: true}
+export function requestOpenGraphMetadata(url) {
+    if (global.mm_config.EnableLinkPreviews !== 'true') {
+        return;
+    }
+
+    const onself = requestOpenGraphMetadata;
+
+    if (!onself.openGraphMetadataOnGoingRequests[url]) {
+        onself.openGraphMetadataOnGoingRequests[url] = true;
+
+        Client.getOpenGraphMetadata(url,
+            (data) => {
+                AppDispatcher.handleServerAction({
+                    type: ActionTypes.RECIVED_OPEN_GRAPH_METADATA,
+                    url,
+                    data
+                });
+                delete onself.openGraphMetadataOnGoingRequests[url];
+            },
+            (err) => {
+                AsyncClient.dispatchError(err, 'getOpenGraphMetadata');
+                delete onself.openGraphMetadataOnGoingRequests[url];
+            }
+        );
     }
 }

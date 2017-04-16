@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import LoadingScreen from './loading_screen.jsx';
@@ -79,6 +79,7 @@ export default class AccessHistoryModal extends React.Component {
 
         return (
             <Modal
+                dialogClassName='modal--scroll'
                 show={this.state.show}
                 onHide={this.onHide}
                 onExited={this.props.onHide}

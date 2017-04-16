@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import React from 'react';
@@ -50,12 +50,10 @@ export default class WebrtcSettings extends AdminSettings {
 
     renderTitle() {
         return (
-            <h3>
-                <FormattedMessage
-                    id='admin.integrations.webrtc'
-                    defaultMessage='Mattermost WebRTC (Beta)'
-                />
-            </h3>
+            <FormattedMessage
+                id='admin.integrations.webrtc'
+                defaultMessage='Mattermost WebRTC (Beta)'
+            />
         );
     }
 

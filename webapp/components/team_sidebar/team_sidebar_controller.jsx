@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import TeamButton from './components/team_button.jsx';
@@ -7,6 +7,7 @@ import TeamStore from 'stores/team_store.jsx';
 import UserStore from 'stores/user_store.jsx';
 
 import * as AsyncClient from 'utils/async_client.jsx';
+import {sortTeamsByDisplayName} from 'utils/team_utils.jsx';
 import * as Utils from 'utils/utils.jsx';
 
 import $ from 'jquery';
@@ -118,21 +119,21 @@ export default class TeamSidebar extends React.Component {
         }
 
         const teams = myTeams.
-        sort((a, b) => a.display_name.localeCompare(b.display_name)).
-        map((team) => {
-            return (
-                <TeamButton
-                    key={'switch_team_' + team.name}
-                    url={`/${team.name}`}
-                    tip={team.display_name}
-                    active={team.id === this.state.currentTeamId}
-                    isMobile={this.state.isMobile}
-                    displayName={team.display_name}
-                    unread={team.unread}
-                    mentions={team.mentions}
-                />
-            );
-        });
+            sort(sortTeamsByDisplayName).
+            map((team) => {
+                return (
+                    <TeamButton
+                        key={'switch_team_' + team.name}
+                        url={`/${team.name}`}
+                        tip={team.display_name}
+                        active={team.id === this.state.currentTeamId}
+                        isMobile={this.state.isMobile}
+                        displayName={team.display_name}
+                        unread={team.unread}
+                        mentions={team.mentions}
+                    />
+                );
+            });
 
         if (moreTeams) {
             teams.push(

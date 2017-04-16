@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import $ from 'jquery';
@@ -33,7 +33,7 @@ export default class SearchSuggestionList extends SuggestionList {
             text = (
                 <FormattedMessage
                     id='suggestion.search.private'
-                    defaultMessage='Private Groups'
+                    defaultMessage='Private Channels'
                 />
             );
         }

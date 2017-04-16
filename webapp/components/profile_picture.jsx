@@ -1,9 +1,10 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 import ProfilePopover from './profile_popover.jsx';
 import * as Utils from 'utils/utils.jsx';
 
 import React from 'react';
+import StatusIcon from './status_icon.jsx';
 import {OverlayTrigger} from 'react-bootstrap';
 
 export default class ProfilePicture extends React.Component {
@@ -45,10 +46,6 @@ export default class ProfilePicture extends React.Component {
     }
 
     render() {
-        let statusClass = '';
-        if (this.props.status) {
-            statusClass = 'status-' + this.props.status;
-        }
         if (this.props.user) {
             return (
                 <OverlayTrigger
@@ -66,7 +63,7 @@ export default class ProfilePicture extends React.Component {
                         />
                 }
                 >
-                    <span className={`status-wrapper ${statusClass}`}>
+                    <span className='status-wrapper'>
                         <img
                             className='more-modal__image'
                             width={this.props.width}
@@ -74,12 +71,13 @@ export default class ProfilePicture extends React.Component {
 			    style={{backgroundImage:'url(' + this.props.src + ')', backgroundSize:'cover'}}
                             src='/images/1x1.png'
                         />
+                        <StatusIcon status={this.props.status}/>
                     </span>
                 </OverlayTrigger>
             );
         }
         return (
-            <span className={`status-wrapper ${statusClass}`}>
+            <span className='status-wrapper'>
                 <img
                     className='more-modal__image'
                     width={this.props.width}
@@ -87,6 +85,7 @@ export default class ProfilePicture extends React.Component {
                     style={{backgroundImage:'url(' + this.props.src + ')', backgroundSize:'cover'}}
                     src='/images/1x1.png'
                 />
+                <StatusIcon status={this.props.status}/>
             </span>
         );
     }

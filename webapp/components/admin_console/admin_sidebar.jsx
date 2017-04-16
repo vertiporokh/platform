@@ -1,20 +1,14 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import $ from 'jquery';
 import React from 'react';
+import {FormattedMessage} from 'react-intl';
 
-import AdminStore from 'stores/admin_store.jsx';
-import * as AsyncClient from 'utils/async_client.jsx';
 import * as Utils from 'utils/utils.jsx';
 
-import AdminSidebarHeader from './admin_sidebar_header.jsx';
-import AdminSidebarTeam from './admin_sidebar_team.jsx';
-import {FormattedMessage} from 'react-intl';
-import {browserHistory} from 'react-router/es6';
-import {OverlayTrigger, Tooltip} from 'react-bootstrap';
-import SelectTeamModal from './select_team_modal.jsx';
 import AdminSidebarCategory from './admin_sidebar_category.jsx';
+import AdminSidebarHeader from './admin_sidebar_header.jsx';
 import AdminSidebarSection from './admin_sidebar_section.jsx';
 
 export default class AdminSidebar extends React.Component {
@@ -27,82 +21,21 @@ export default class AdminSidebar extends React.Component {
     constructor(props) {
         super(props);
 
-        this.handleAllTeamsChange = this.handleAllTeamsChange.bind(this);
-
-        this.removeTeam = this.removeTeam.bind(this);
-
-        this.showTeamSelect = this.showTeamSelect.bind(this);
-        this.teamSelectedModal = this.teamSelectedModal.bind(this);
-        this.teamSelectedModalDismissed = this.teamSelectedModalDismissed.bind(this);
-
         this.updateTitle = this.updateTitle.bind(this);
-
-        this.renderAddTeamButton = this.renderAddTeamButton.bind(this);
-        this.renderTeams = this.renderTeams.bind(this);
-
-        this.state = {
-            teams: AdminStore.getAllTeams(),
-            selectedTeams: AdminStore.getSelectedTeams(),
-            showSelectModal: false
-        };
     }
 
     componentDidMount() {
-        AdminStore.addAllTeamsChangeListener(this.handleAllTeamsChange);
-        AsyncClient.getAllTeams();
-
         this.updateTitle();
+
+        if (!Utils.isMobile()) {
+            $('.admin-sidebar .nav-pills__container').perfectScrollbar();
+        }
     }
 
     componentDidUpdate() {
         if (!Utils.isMobile()) {
             $('.admin-sidebar .nav-pills__container').perfectScrollbar();
         }
-    }
-
-    componentWillUnmount() {
-        AdminStore.removeAllTeamsChangeListener(this.handleAllTeamsChange);
-    }
-
-    handleAllTeamsChange() {
-        this.setState({
-            teams: AdminStore.getAllTeams(),
-            selectedTeams: AdminStore.getSelectedTeams()
-        });
-    }
-
-    removeTeam(team) {
-        const selectedTeams = Object.assign({}, this.state.selectedTeams);
-        Reflect.deleteProperty(selectedTeams, team.id);
-        AdminStore.saveSelectedTeams(selectedTeams);
-
-        this.handleAllTeamsChange();
-
-        if (this.context.router.isActive('/admin_console/team/' + team.id)) {
-            browserHistory.push('/admin_console');
-        }
-    }
-
-    showTeamSelect(e) {
-        e.preventDefault();
-        this.setState({showSelectModal: true});
-    }
-
-    teamSelectedModal(teamId) {
-        this.setState({
-            showSelectModal: false
-        });
-
-        const selectedTeams = Object.assign({}, this.state.selectedTeams);
-        selectedTeams[teamId] = true;
-
-        AdminStore.saveSelectedTeams(selectedTeams);
-
-        this.handleAllTeamsChange();
-    }
-
-    teamSelectedModalDismissed() {
-        this.setState({showSelectModal: false});
     }
 
     updateTitle() {
@@ -112,92 +45,6 @@ export default class AdminSidebar extends React.Component {
         }
 
         document.title = Utils.localizeMessage('sidebar_right_menu.console', 'System Console') + ' - ' + currentSiteName;
-    }
-
-    sortTeams(a, b) {
-        const teamA = a.display_name.toLowerCase();
-        const teamB = b.display_name.toLowerCase();
-
-        if (teamA < teamB) {
-            return -1;
-        }
-        if (teamA > teamB) {
-            return 1;
-        }
-        return 0;
-    }
-
-    renderAddTeamButton() {
-        const addTeamTooltip = (
-            <Tooltip id='add-team-tooltip'>
-                <FormattedMessage
-                    id='admin.sidebar.addTeamSidebar'
-                    defaultMessage='Add team from sidebar menu'
-                />
-            </Tooltip>
-        );
-
-        return (
-            <span className='menu-icon--right'>
-                <OverlayTrigger
-                    delayShow={1000}
-                    placement='top'
-                    overlay={addTeamTooltip}
-                >
-                    <a
-                        href='#'
-                        onClick={this.showTeamSelect}
-                    >
-                        <i
-                            className='fa fa-plus'
-                        />
-                    </a>
-                </OverlayTrigger>
-            </span>
-        );
-    }
-
-    renderTeams() {
-        const teams = [];
-        const teamsArray = [];
-
-        Reflect.ownKeys(this.state.selectedTeams).forEach((key) => {
-            if (this.state.teams[key]) {
-                teamsArray.push(this.state.teams[key]);
-            }
-        });
-
-        teamsArray.sort(this.sortTeams);
-
-        for (let i = 0; i < teamsArray.length; i++) {
-            const team = teamsArray[i];
-            teams.push(
-                <AdminSidebarTeam
-                    key={team.id}
-                    team={team}
-                    onRemoveTeam={this.removeTeam}
-                />
-            );
-        }
-
-        return (
-            <AdminSidebarCategory
-                parentLink='/admin_console'
-                icon='fa-user'
-                title={
-                    <FormattedMessage
-                        id='admin.sidebar.teams'
-                        defaultMessage='TEAMS ({count, number})'
-                        values={{
-                            count: Object.keys(this.state.teams).length
-                        }}
-                    />
-                }
-                action={this.renderAddTeamButton()}
-            >
-                {teams}
-            </AdminSidebarCategory>
-        );
     }
 
     render() {
@@ -263,7 +110,7 @@ export default class AdminSidebar extends React.Component {
                         title={
                             <FormattedMessage
                                 id='admin.sidebar.metrics'
-                                defaultMessage='Performance Monitoring (Beta)'
+                                defaultMessage='Performance Monitoring'
                             />
                         }
                     />
@@ -435,6 +282,24 @@ export default class AdminSidebar extends React.Component {
                                 }
                             />
                             <AdminSidebarSection
+                                name='team_analytics'
+                                title={
+                                    <FormattedMessage
+                                        id='admin.sidebar.statistics'
+                                        defaultMessage='Team Statistics'
+                                    />
+                                }
+                            />
+                            <AdminSidebarSection
+                                name='users'
+                                title={
+                                    <FormattedMessage
+                                        id='admin.sidebar.users'
+                                        defaultMessage='Users'
+                                    />
+                                }
+                            />
+                            <AdminSidebarSection
                                 name='logs'
                                 title={
                                     <FormattedMessage
@@ -524,7 +389,7 @@ export default class AdminSidebar extends React.Component {
                                 }
                             >
                                 <AdminSidebarSection
-                                    name='email'
+                                    name='authentication_email'
                                     title={
                                         <FormattedMessage
                                             id='admin.sidebar.email'
@@ -604,7 +469,7 @@ export default class AdminSidebar extends React.Component {
                                 }
                             >
                                 <AdminSidebarSection
-                                    name='email'
+                                    name='notifications_email'
                                     title={
                                         <FormattedMessage
                                             id='admin.sidebar.email'
@@ -703,6 +568,16 @@ export default class AdminSidebar extends React.Component {
                                     }
                                 />
                                 <AdminSidebarSection
+                                    name='link_previews'
+                                    title={
+                                        <FormattedMessage
+                                            id='admin.sidebar.linkPreviews'
+                                            defaultMessage='Link Previews'
+                                        />
+
+                                    }
+                                />
+                                <AdminSidebarSection
                                     name='legal_and_support'
                                     title={
                                         <FormattedMessage
@@ -763,16 +638,9 @@ export default class AdminSidebar extends React.Component {
                                 {metricsSettings}
                             </AdminSidebarSection>
                         </AdminSidebarCategory>
-                        {this.renderTeams()}
                         {otherCategory}
                     </ul>
                 </div>
-                <SelectTeamModal
-                    teams={this.state.teams}
-                    show={this.state.showSelectModal}
-                    onModalSubmit={this.teamSelectedModal}
-                    onModalDismissed={this.teamSelectedModalDismissed}
-                />
             </div>
         );
     }

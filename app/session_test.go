@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package app
@@ -22,7 +22,7 @@ func TestCache(t *testing.T) {
 		t.Fatal("should have items")
 	}
 
-	RemoveAllSessionsForUserId(session.UserId)
+	ClearSessionCacheForUser(session.UserId)
 
 	rkeys := sessionCache.Keys()
 	if len(rkeys) != len(keys)-1 {

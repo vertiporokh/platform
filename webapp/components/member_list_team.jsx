@@ -1,7 +1,7 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
-import SearchableUserList from 'components/searchable_user_list.jsx';
+import SearchableUserList from 'components/searchable_user_list/searchable_user_list_container.jsx';
 import TeamMembersDropdown from 'components/team_members_dropdown.jsx';
 
 import UserStore from 'stores/user_store.jsx';
@@ -42,7 +42,7 @@ export default class MemberListTeam extends React.Component {
     }
 
     componentDidMount() {
-        UserStore.addInTeamChangeListener(this.onChange);
+        UserStore.addInTeamChangeListener(this.onTeamChange);
         UserStore.addStatusesChangeListener(this.onChange);
         TeamStore.addChangeListener(this.onChange.bind(null, true));
         TeamStore.addStatsChangeListener(this.onStatsChange);
@@ -52,7 +52,7 @@ export default class MemberListTeam extends React.Component {
     }
 
     componentWillUnmount() {
-        UserStore.removeInTeamChangeListener(this.onChange);
+        UserStore.removeInTeamChangeListener(this.onTeamChange);
         UserStore.removeStatusesChangeListener(this.onChange);
         TeamStore.removeChangeListener(this.onChange);
         TeamStore.removeStatsChangeListener(this.onStatsChange);
@@ -83,12 +83,13 @@ export default class MemberListTeam extends React.Component {
     }
 
     search(term) {
+        clearTimeout(this.searchTimeoutId);
+
         if (term === '') {
             this.setState({search: false, term, users: UserStore.getProfileListInTeam(), teamMembers: Object.assign([], TeamStore.getMembersInTeam())});
+            this.searchTimeoutId = '';
             return;
         }
-
-        clearTimeout(this.searchTimeoutId);
 
         this.searchTimeoutId = setTimeout(
             () => {

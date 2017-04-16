@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import SearchableChannelList from './searchable_channel_list.jsx';
@@ -10,6 +10,7 @@ import TeamStore from 'stores/team_store.jsx';
 import Constants from 'utils/constants.jsx';
 import * as AsyncClient from 'utils/async_client.jsx';
 import {joinChannel, searchMoreChannels} from 'actions/channel_actions.jsx';
+import {showCreateOption} from 'utils/channel_utils.jsx';
 
 import React from 'react';
 import PureRenderMixin from 'react-addons-pure-render-mixin';
@@ -99,13 +100,14 @@ export default class MoreChannels extends React.Component {
     }
 
     search(term) {
+        clearTimeout(this.searchTimeoutId);
+
         if (term === '') {
             this.onChange(true);
             this.setState({search: false});
+            this.searchTimeoutId = '';
             return;
         }
-
-        clearTimeout(this.searchTimeoutId);
 
         this.searchTimeoutId = setTimeout(
             () => {
@@ -151,14 +153,9 @@ export default class MoreChannels extends React.Component {
         const isAdmin = TeamStore.isTeamAdminForCurrentTeam() || UserStore.isSystemAdminForCurrentUser();
         const isSystemAdmin = UserStore.isSystemAdminForCurrentUser();
 
-        if (global.window.mm_license.IsLicensed === 'true') {
-            if (global.window.mm_config.RestrictPublicChannelManagement === Constants.PERMISSIONS_SYSTEM_ADMIN && !isSystemAdmin) {
-                createNewChannelButton = null;
-                createChannelHelpText = null;
-            } else if (global.window.mm_config.RestrictPublicChannelManagement === Constants.PERMISSIONS_TEAM_ADMIN && !isAdmin) {
-                createNewChannelButton = null;
-                createChannelHelpText = null;
-            }
+        if (!showCreateOption(Constants.OPEN_CHANNEL, isAdmin, isSystemAdmin)) {
+            createNewChannelButton = null;
+            createChannelHelpText = null;
         }
 
         return (

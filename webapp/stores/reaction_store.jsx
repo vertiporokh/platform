@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import AppDispatcher from '../dispatcher/app_dispatcher.jsx';
@@ -37,36 +37,36 @@ class ReactionStore extends EventEmitter {
     }
 
     addReaction(postId, reaction) {
-        const reactions = [];
+        let reactions = this.getReactions(postId) || [];
 
-        for (const existing of this.getReactions(postId)) {
-            // make sure not to add duplicates
-            if (existing.user_id !== reaction.user_id || existing.post_id !== reaction.post_id ||
-                existing.emoji_name !== reaction.emoji_name) {
-                reactions.push(existing);
-            }
+        // Make sure not to add duplicates
+        const existingIndex = reactions.findIndex((existing) => {
+            return existing.user_id === reaction.user_id && existing.post_id === reaction.post_id && existing.emoji_name === reaction.emoji_name;
+        });
+
+        if (existingIndex === -1) {
+            reactions = [...reactions, reaction];
         }
-
-        reactions.push(reaction);
 
         this.setReactions(postId, reactions);
     }
 
     removeReaction(postId, reaction) {
-        const reactions = [];
+        let reactions = this.getReactions(postId) || [];
 
-        for (const existing of this.getReactions(postId)) {
-            if (existing.user_id !== reaction.user_id || existing.post_id !== reaction.post_id ||
-                existing.emoji_name !== reaction.emoji_name) {
-                reactions.push(existing);
-            }
+        const existingIndex = reactions.findIndex((existing) => {
+            return existing.user_id === reaction.user_id && existing.post_id === reaction.post_id && existing.emoji_name === reaction.emoji_name;
+        });
+
+        if (existingIndex !== -1) {
+            reactions = reactions.slice(0, existingIndex).concat(reactions.slice(existingIndex + 1));
         }
 
         this.setReactions(postId, reactions);
     }
 
     getReactions(postId) {
-        return this.reactions.get(postId) || [];
+        return this.reactions.get(postId);
     }
 
     handleEventPayload(payload) {

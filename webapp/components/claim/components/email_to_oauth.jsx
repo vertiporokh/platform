@@ -1,13 +1,13 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import LoginMfa from 'components/login/components/login_mfa.jsx';
 
 import * as Utils from 'utils/utils.jsx';
-import Client from 'client/web_client.jsx';
 import Constants from 'utils/constants.jsx';
 
 import {checkMfa} from 'actions/user_actions.jsx';
+import {emailToOAuth} from 'actions/admin_actions.jsx';
 
 import React from 'react';
 import ReactDOM from 'react-dom';
@@ -55,7 +55,7 @@ export default class EmailToOAuth extends React.Component {
     }
 
     submit(loginId, password, token) {
-        Client.emailToOAuth(
+        emailToOAuth(
             loginId,
             password,
             token,

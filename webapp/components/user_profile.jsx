@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import ProfilePopover from './profile_popover.jsx';
@@ -102,7 +102,7 @@ UserProfile.defaultProps = {
 };
 UserProfile.propTypes = {
     user: React.PropTypes.object,
-    overwriteName: React.PropTypes.string,
+    overwriteName: React.PropTypes.node,
     overwriteImage: React.PropTypes.string,
     disablePopover: React.PropTypes.bool,
     displayNameType: React.PropTypes.string,

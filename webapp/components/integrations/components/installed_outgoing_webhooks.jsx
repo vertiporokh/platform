@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import BackstageList from 'components/backstage/components/backstage_list.jsx';
@@ -114,6 +114,7 @@ export default class InstalledOutgoingWebhooks extends React.Component {
                     onDelete={this.deleteOutgoingWebhook}
                     creator={this.state.users[outgoingWebhook.creator_id] || {}}
                     canChange={canChange}
+                    team={this.props.team}
                 />
             );
         });

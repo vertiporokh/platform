@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import AdminStore from 'stores/admin_store.jsx';
@@ -85,7 +85,7 @@ export default class Logs extends React.Component {
 
         return (
             <div className='panel'>
-                <h3>
+                <h3 className='admin-console-header'>
                     <FormattedMessage
                         id='admin.logs.title'
                         defaultMessage='Server Logs'

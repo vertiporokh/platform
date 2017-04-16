@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package app
@@ -17,10 +17,11 @@ import (
 )
 
 const (
-	WRITE_WAIT   = 30 * time.Second
-	PONG_WAIT    = 100 * time.Second
-	PING_PERIOD  = (PONG_WAIT * 6) / 10
-	AUTH_TIMEOUT = 5 * time.Second
+	WRITE_WAIT                = 30 * time.Second
+	PONG_WAIT                 = 100 * time.Second
+	PING_PERIOD               = (PONG_WAIT * 6) / 10
+	AUTH_TIMEOUT              = 5 * time.Second
+	WEBCONN_MEMBER_CACHE_TIME = 1000 * 60 * 30 // 30 minutes
 )
 
 type WebConn struct {
@@ -28,11 +29,13 @@ type WebConn struct {
 	Send                      chan model.WebSocketMessage
 	SessionToken              string
 	SessionExpiresAt          int64
+	Session                   *model.Session
 	UserId                    string
 	T                         goi18n.TranslateFunc
 	Locale                    string
 	AllChannelMembers         map[string]string
 	LastAllChannelMembersTime int64
+	Sequence                  int64
 }
 
 func NewWebConn(ws *websocket.Conn, session model.Session, t goi18n.TranslateFunc, locale string) *WebConn {
@@ -102,8 +105,19 @@ func (c *WebConn) WritePump() {
 				return
 			}
 
+			var msgBytes []byte
+			if evt, ok := msg.(*model.WebSocketEvent); ok {
+				cpyEvt := &model.WebSocketEvent{}
+				*cpyEvt = *evt
+				cpyEvt.Sequence = c.Sequence
+				msgBytes = []byte(cpyEvt.ToJson())
+				c.Sequence++
+			} else {
+				msgBytes = []byte(msg.ToJson())
+			}
+
 			c.WebSocket.SetWriteDeadline(time.Now().Add(WRITE_WAIT))
-			if err := c.WebSocket.WriteMessage(websocket.TextMessage, msg.GetPreComputeJson()); err != nil {
+			if err := c.WebSocket.WriteMessage(websocket.TextMessage, msgBytes); err != nil {
 				// browsers will appear as CloseNoStatusReceived
 				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived) {
 					l4g.Debug(fmt.Sprintf("websocket.send: client side closed socket userId=%v", c.UserId))
@@ -147,6 +161,7 @@ func (webCon *WebConn) InvalidateCache() {
 	webCon.AllChannelMembers = nil
 	webCon.LastAllChannelMembersTime = 0
 	webCon.SessionExpiresAt = 0
+	webCon.Session = nil
 }
 
 func (webCon *WebConn) IsAuthenticated() bool {
@@ -161,11 +176,13 @@ func (webCon *WebConn) IsAuthenticated() bool {
 			l4g.Error(utils.T("api.websocket.invalid_session.error"), err.Error())
 			webCon.SessionToken = ""
 			webCon.SessionExpiresAt = 0
+			webCon.Session = nil
 			return false
 		}
 
 		webCon.SessionToken = session.Token
 		webCon.SessionExpiresAt = session.ExpiresAt
+		webCon.Session = session
 	}
 
 	return true
@@ -173,8 +190,7 @@ func (webCon *WebConn) IsAuthenticated() bool {
 
 func (webCon *WebConn) SendHello() {
 	msg := model.NewWebSocketEvent(model.WEBSOCKET_EVENT_HELLO, "", "", webCon.UserId, nil)
-	msg.Add("server_version", fmt.Sprintf("%v.%v.%v", model.CurrentVersion, model.BuildNumber, utils.CfgHash))
-	msg.DoPreComputeJson()
+	msg.Add("server_version", fmt.Sprintf("%v.%v.%v.%v", model.CurrentVersion, model.BuildNumber, utils.CfgHash, utils.IsLicensed))
 	webCon.Send <- msg
 }
 
@@ -198,15 +214,7 @@ func (webCon *WebConn) ShouldSendEvent(msg *model.WebSocketEvent) bool {
 
 	// Only report events to users who are in the channel for the event
 	if len(msg.Broadcast.ChannelId) > 0 {
-
-		// Only broadcast typing messages if less than 1K people in channel
-		if msg.Event == model.WEBSOCKET_EVENT_TYPING {
-			if Srv.Store.Channel().GetMemberCountFromCache(msg.Broadcast.ChannelId) > *utils.Cfg.TeamSettings.MaxNotificationsPerChannel {
-				return false
-			}
-		}
-
-		if model.GetMillis()-webCon.LastAllChannelMembersTime > 1000*60*15 { // 15 minutes
+		if model.GetMillis()-webCon.LastAllChannelMembersTime > WEBCONN_MEMBER_CACHE_TIME {
 			webCon.AllChannelMembers = nil
 			webCon.LastAllChannelMembersTime = 0
 		}
@@ -238,17 +246,23 @@ func (webCon *WebConn) ShouldSendEvent(msg *model.WebSocketEvent) bool {
 }
 
 func (webCon *WebConn) IsMemberOfTeam(teamId string) bool {
-	session, err := GetSession(webCon.SessionToken)
-	if err != nil {
-		l4g.Error(utils.T("api.websocket.invalid_session.error"), err.Error())
-		return false
-	} else {
-		member := session.GetTeamByTeamId(teamId)
 
-		if member != nil {
-			return true
-		} else {
+	if webCon.Session == nil {
+		session, err := GetSession(webCon.SessionToken)
+		if err != nil {
+			l4g.Error(utils.T("api.websocket.invalid_session.error"), err.Error())
 			return false
+		} else {
+			webCon.Session = session
 		}
+
+	}
+
+	member := webCon.Session.GetTeamByTeamId(teamId)
+
+	if member != nil {
+		return true
+	} else {
+		return false
 	}
 }

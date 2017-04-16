@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -34,7 +34,7 @@ func TestAppError(t *testing.T) {
 		t.Fatal()
 	}
 
-	err.Error()
+	t.Log(err.Error())
 }
 
 func TestAppErrorJunk(t *testing.T) {

@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package app
@@ -90,6 +90,60 @@ func GetStatusesByIds(userIds []string) (map[string]interface{}, *model.AppError
 	return statusMap, nil
 }
 
+//GetUserStatusesByIds used by apiV4
+func GetUserStatusesByIds(userIds []string) ([]*model.Status, *model.AppError) {
+	var statusMap []*model.Status
+	metrics := einterfaces.GetMetricsInterface()
+
+	missingUserIds := []string{}
+	for _, userId := range userIds {
+		if result, ok := statusCache.Get(userId); ok {
+			statusMap = append(statusMap, result.(*model.Status))
+			if metrics != nil {
+				metrics.IncrementMemCacheHitCounter("Status")
+			}
+		} else {
+			missingUserIds = append(missingUserIds, userId)
+			if metrics != nil {
+				metrics.IncrementMemCacheMissCounter("Status")
+			}
+		}
+	}
+
+	if len(missingUserIds) > 0 {
+		if result := <-Srv.Store.Status().GetByIds(missingUserIds); result.Err != nil {
+			return nil, result.Err
+		} else {
+			statuses := result.Data.([]*model.Status)
+
+			for _, s := range statuses {
+				AddStatusCache(s)
+			}
+
+			statusMap = append(statusMap, statuses...)
+		}
+	}
+
+	// For the case where the user does not have a row in the Status table and cache
+	// remove the existing ids from missingUserIds and then create a offline state for the missing ones
+	// This also return the status offline for the non-existing Ids in the system
+	for i := 0; i < len(missingUserIds); i++ {
+		missingUserId := missingUserIds[i]
+		for _, userMap := range statusMap {
+			if missingUserId == userMap.UserId {
+				missingUserIds = append(missingUserIds[:i], missingUserIds[i+1:]...)
+				i--
+				break
+			}
+		}
+	}
+	for _, userId := range missingUserIds {
+		statusMap = append(statusMap, &model.Status{UserId: userId, Status: "offline"})
+	}
+
+	return statusMap, nil
+}
+
 func SetStatusOnline(userId string, sessionId string, manual bool) {
 	broadcast := false
 
@@ -100,7 +154,7 @@ func SetStatusOnline(userId string, sessionId string, manual bool) {
 	var err *model.AppError
 
 	if status, err = GetStatus(userId); err != nil {
-		status = &model.Status{userId, model.STATUS_ONLINE, false, model.GetMillis(), ""}
+		status = &model.Status{UserId: userId, Status: model.STATUS_ONLINE, Manual: false, LastActivityAt: model.GetMillis(), ActiveChannel: ""}
 		broadcast = true
 	} else {
 		if status.Manual && !manual {
@@ -157,7 +211,7 @@ func SetStatusOffline(userId string, manual bool) {
 		return // manually set status always overrides non-manual one
 	}
 
-	status = &model.Status{userId, model.STATUS_OFFLINE, manual, model.GetMillis(), ""}
+	status = &model.Status{UserId: userId, Status: model.STATUS_OFFLINE, Manual: manual, LastActivityAt: model.GetMillis(), ActiveChannel: ""}
 
 	AddStatusCache(status)
 
@@ -175,7 +229,7 @@ func SetStatusAwayIfNeeded(userId string, manual bool) {
 	status, err := GetStatus(userId)
 
 	if err != nil {
-		status = &model.Status{userId, model.STATUS_OFFLINE, manual, 0, ""}
+		status = &model.Status{UserId: userId, Status: model.STATUS_OFFLINE, Manual: manual, LastActivityAt: 0, ActiveChannel: ""}
 	}
 
 	if !manual && status.Manual {
@@ -234,22 +288,4 @@ func GetStatus(userId string) (*model.Status, *model.AppError) {
 
 func IsUserAway(lastActivityAt int64) bool {
 	return model.GetMillis()-lastActivityAt >= *utils.Cfg.TeamSettings.UserStatusAwayTimeout*1000
-}
-
-func DoesStatusAllowPushNotification(user *model.User, status *model.Status, channelId string) bool {
-	props := user.NotifyProps
-
-	if props["push"] == "none" {
-		return false
-	}
-
-	if pushStatus, ok := props["push_status"]; (pushStatus == model.STATUS_ONLINE || !ok) && (status.ActiveChannel != channelId || model.GetMillis()-status.LastActivityAt > model.STATUS_CHANNEL_TIMEOUT) {
-		return true
-	} else if pushStatus == model.STATUS_AWAY && (status.Status == model.STATUS_AWAY || status.Status == model.STATUS_OFFLINE) {
-		return true
-	} else if pushStatus == model.STATUS_OFFLINE && status.Status == model.STATUS_OFFLINE {
-		return true
-	}
-
-	return false
 }

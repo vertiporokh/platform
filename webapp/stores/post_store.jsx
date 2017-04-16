@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import AppDispatcher from '../dispatcher/app_dispatcher.jsx';
@@ -8,7 +8,7 @@ import ChannelStore from 'stores/channel_store.jsx';
 import BrowserStore from 'stores/browser_store.jsx';
 import UserStore from 'stores/user_store.jsx';
 
-import Constants from 'utils/constants.jsx';
+import {Constants, PostTypes} from 'utils/constants.jsx';
 const ActionTypes = Constants.ActionTypes;
 
 const CHANGE_EVENT = 'change';
@@ -16,6 +16,7 @@ const FOCUSED_POST_CHANGE = 'focused_post_change';
 const EDIT_POST_EVENT = 'edit_post';
 const POSTS_VIEW_JUMP_EVENT = 'post_list_jump';
 const SELECTED_POST_CHANGE_EVENT = 'selected_post_change';
+const POST_PINNED_CHANGE_EVENT = 'post_pinned_change';
 
 class PostStoreClass extends EventEmitter {
     constructor() {
@@ -98,11 +99,11 @@ class PostStoreClass extends EventEmitter {
             return null;
         }
 
-        const posts = postInfo.postList;
+        const postList = postInfo.postList;
         let post = null;
 
-        if (posts.posts.hasOwnProperty(postId)) {
-            post = posts.posts[postId];
+        if (postList && postList.posts && postList.posts.hasOwnProperty(postId)) {
+            post = postList.posts[postId];
         }
 
         return post;
@@ -259,22 +260,42 @@ class PostStoreClass extends EventEmitter {
         this.postsInfo[id].postList = combinedPosts;
     }
 
+    focusedPostListHasPost(id) {
+        const focusedPostId = this.getFocusedPostId();
+        if (focusedPostId == null) {
+            return false;
+        }
+
+        const focusedPostList = makePostListNonNull(this.getAllPosts(focusedPostId));
+        return focusedPostList.posts.hasOwnProperty(id);
+    }
+
     storePost(post, isNewPost = false) {
-        const postList = makePostListNonNull(this.getAllPosts(post.channel_id));
+        const ids = [
+            post.channel_id
+        ];
 
-        if (post.pending_post_id !== '') {
-            this.removePendingPost(post.channel_id, post.pending_post_id);
+        // update the post in the permalink view if it's there
+        if (!isNewPost && this.focusedPostListHasPost(post.id)) {
+            ids.push(this.getFocusedPostId());
         }
 
-        post.pending_post_id = '';
+        ids.forEach((id) => {
+            const postList = makePostListNonNull(this.getAllPosts(id));
+            if (post.pending_post_id !== '') {
+                this.removePendingPost(post.channel_id, post.pending_post_id);
+            }
 
-        postList.posts[post.id] = post;
-        if (isNewPost && postList.order.indexOf(post.id) === -1) {
-            postList.order.unshift(post.id);
-        }
+            post.pending_post_id = '';
 
-        this.makePostsInfo(post.channel_id);
-        this.postsInfo[post.channel_id].postList = postList;
+            postList.posts[post.id] = post;
+            if (isNewPost && postList.order.indexOf(post.id) === -1) {
+                postList.order.unshift(post.id);
+            }
+
+            this.makePostsInfo(post.channel_id);
+            this.postsInfo[id].postList = postList;
+        });
     }
 
     storeFocusedPost(postId, channelId, postList) {
@@ -500,6 +521,18 @@ class PostStoreClass extends EventEmitter {
         this.removeListener(SELECTED_POST_CHANGE_EVENT, callback);
     }
 
+    emitPostPinnedChange() {
+        this.emit(POST_PINNED_CHANGE_EVENT);
+    }
+
+    addPostPinnedChangeListener(callback) {
+        this.on(POST_PINNED_CHANGE_EVENT, callback);
+    }
+
+    removePostPinnedChangeListener(callback) {
+        this.removeListener(POST_PINNED_CHANGE_EVENT, callback);
+    }
+
     getCurrentUsersLatestPost(channelId, rootId) {
         const userId = UserStore.getCurrentId();
 
@@ -616,7 +649,9 @@ class PostStoreClass extends EventEmitter {
 
         if (!joinLeave && postsList) {
             postsList.order = postsList.order.filter((id) => {
-                if (postsList.posts[id].type === Constants.POST_TYPE_JOIN_LEAVE) {
+                const post = postsList.posts[id];
+
+                if (post.type === PostTypes.JOIN_LEAVE || post.type === PostTypes.JOIN_CHANNEL || post.type === PostTypes.LEAVE_CHANNEL) {
                     Reflect.deleteProperty(postsList.posts, id);
 
                     return false;
@@ -683,6 +718,10 @@ PostStore.dispatchToken = AppDispatcher.register((payload) => {
     case ActionTypes.RECEIVED_POST_SELECTED:
         PostStore.storeSelectedPostId(action.postId);
         PostStore.emitSelectedPostChange(action.from_search, action.from_flagged_posts);
+        break;
+    case ActionTypes.RECEIVED_POST_PINNED:
+    case ActionTypes.RECEIVED_POST_UNPINNED:
+        PostStore.emitPostPinnedChange();
         break;
     default:
     }

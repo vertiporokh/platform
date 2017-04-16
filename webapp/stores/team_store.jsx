@@ -1,11 +1,16 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import AppDispatcher from '../dispatcher/app_dispatcher.jsx';
 import EventEmitter from 'events';
 import UserStore from 'stores/user_store.jsx';
+import ChannelStore from 'stores/channel_store.jsx';
 
 import Constants from 'utils/constants.jsx';
+const NotificationPrefs = Constants.NotificationPrefs;
+const PostTypes = Constants.PostTypes;
+
+import {getSiteURL} from 'utils/url.jsx';
 const ActionTypes = Constants.ActionTypes;
 
 const CHANGE_EVENT = 'change';
@@ -122,10 +127,7 @@ class TeamStoreClass extends EventEmitter {
         const current = this.getCurrent();
 
         if (current) {
-            // can't call Utils.getSiteURL here because that introduces a circular dependency
-            const origin = window.mm_config.SiteURL || window.location.origin;
-
-            return origin + '/signup_user_complete/?id=' + current.invite_id;
+            return getSiteURL() + '/signup_user_complete/?id=' + current.invite_id;
         }
 
         return '';
@@ -138,10 +140,7 @@ class TeamStoreClass extends EventEmitter {
             return '';
         }
 
-        // can't call Utils.getSiteURL here because that introduces a circular dependency
-        const origin = window.mm_config.SiteURL || window.location.origin;
-
-        return origin + '/' + team.name;
+        return getSiteURL() + '/' + team.name;
     }
 
     getCurrentStats() {
@@ -253,6 +252,12 @@ class TeamStoreClass extends EventEmitter {
         }
     }
 
+    removeMemberNotInTeam(teamId = this.getCurrentId(), userId) {
+        if (this.members_not_in_team[teamId]) {
+            Reflect.deleteProperty(this.members_not_in_team[teamId], userId);
+        }
+    }
+
     getMembersInTeam(teamId = this.getCurrentId()) {
         return Object.assign({}, this.members_in_team[teamId]) || {};
     }
@@ -321,6 +326,39 @@ class TeamStoreClass extends EventEmitter {
             member.mention_count -= channelMember.mention_count;
         }
     }
+
+    subtractUnread(teamId, msgs, mentions) {
+        const member = this.my_team_members.filter((m) => m.team_id === teamId)[0];
+        if (member) {
+            const msgCount = member.msg_count - msgs;
+            const mentionCount = member.mention_count - mentions;
+
+            member.msg_count = (msgCount > 0) ? msgCount : 0;
+            member.mention_count = (mentionCount > 0) ? mentionCount : 0;
+        }
+    }
+
+    incrementMessages(id, channelId) {
+        const channelMember = ChannelStore.getMyMember(channelId);
+        if (channelMember && channelMember.notify_props && channelMember.notify_props.mark_unread === NotificationPrefs.MENTION) {
+            return;
+        }
+
+        const member = this.my_team_members.filter((m) => m.team_id === id)[0];
+        member.msg_count++;
+    }
+
+    incrementMentionsIfNeeded(id, msgProps) {
+        let mentions = [];
+        if (msgProps && msgProps.mentions) {
+            mentions = JSON.parse(msgProps.mentions);
+        }
+
+        if (mentions.indexOf(UserStore.getCurrentId()) !== -1) {
+            const member = this.my_team_members.filter((m) => m.team_id === id)[0];
+            member.mention_count++;
+        }
+    }
 }
 
 var TeamStore = new TeamStoreClass();
@@ -331,6 +369,10 @@ TeamStore.dispatchToken = AppDispatcher.register((payload) => {
     switch (action.type) {
     case ActionTypes.RECEIVED_MY_TEAM:
         TeamStore.saveMyTeam(action.team);
+        TeamStore.emitChange();
+        break;
+    case ActionTypes.RECEIVED_TEAM:
+        TeamStore.saveTeam(action.team);
         TeamStore.emitChange();
         break;
     case ActionTypes.CREATED_TEAM:
@@ -373,6 +415,18 @@ TeamStore.dispatchToken = AppDispatcher.register((payload) => {
         if (action.channelMember) {
             TeamStore.updateUnreadCount(action.team_id, action.total_msg_count, action.channelMember);
             TeamStore.emitUnreadChange();
+        }
+        break;
+    case ActionTypes.RECEIVED_POST:
+        if (action.post.type === PostTypes.JOIN_LEAVE || action.post.type === PostTypes.JOIN_CHANNEL || action.post.type === PostTypes.LEAVE_CHANNEL) {
+            return;
+        }
+
+        var id = action.websocketMessageProps ? action.websocketMessageProps.team_id : null;
+        if (id && TeamStore.getCurrentId() !== id) {
+            TeamStore.incrementMessages(id, action.post.channel_id);
+            TeamStore.incrementMentionsIfNeeded(id, action.websocketMessageProps);
+            TeamStore.emitChange();
         }
         break;
     default:

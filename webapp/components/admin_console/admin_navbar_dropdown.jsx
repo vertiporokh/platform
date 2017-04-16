@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import $ from 'jquery';
@@ -6,6 +6,7 @@ import ReactDOM from 'react-dom';
 
 import TeamStore from 'stores/team_store.jsx';
 import Constants from 'utils/constants.jsx';
+import {sortTeamsByDisplayName} from 'utils/team_utils.jsx';
 import * as GlobalActions from 'actions/global_actions.jsx';
 
 import {FormattedMessage} from 'react-intl';
@@ -13,6 +14,8 @@ import {FormattedMessage} from 'react-intl';
 import {Link} from 'react-router/es6';
 
 import React from 'react';
+
+import * as Utils from 'utils/utils.jsx';
 
 export default class AdminNavbarDropdown extends React.Component {
     constructor(props) {
@@ -64,14 +67,13 @@ export default class AdminNavbarDropdown extends React.Component {
             }
 
             // Sort teams alphabetically with display_name
-            teamsArray.sort((teamA, teamB) =>
-                teamA.display_name.localeCompare(teamB.display_name)
-            );
+            teamsArray = teamsArray.sort(sortTeamsByDisplayName);
 
             for (const team of teamsArray) {
                 teams.push(
                     <li key={'team_' + team.name}>
                         <Link
+                            id={'swithTo' + Utils.createSafeId(team.name)}
                             to={'/' + team.name + '/channels/town-square'}
                         >
                             <FormattedMessage
@@ -114,6 +116,7 @@ export default class AdminNavbarDropdown extends React.Component {
                 >
                     <a
                         href='#'
+                        id='adminNavbarDropdownButton'
                         className='dropdown-toggle admin-navbar-dropdown__toggle'
                         data-toggle='dropdown'
                         role='button'
@@ -137,6 +140,7 @@ export default class AdminNavbarDropdown extends React.Component {
                         <li>
                             <a
                                 href='#'
+                                id='logout'
                                 onClick={() => GlobalActions.emitUserLoggedOutEvent()}
                             >
                                 <FormattedMessage

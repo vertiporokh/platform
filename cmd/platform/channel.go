@@ -1,11 +1,10 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 package main
 
 import (
 	"errors"
 
-	"github.com/mattermost/platform/api"
 	"github.com/mattermost/platform/app"
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/utils"
@@ -117,8 +116,9 @@ func createChannelCmdF(cmd *cobra.Command, args []string) error {
 	}
 
 	team := getTeamFromTeamArg(teamArg)
-
-	c := getMockContext()
+	if team == nil {
+		return errors.New("Unable to find team: " + teamArg)
+	}
 
 	channel := &model.Channel{
 		TeamId:      team.Id,
@@ -127,7 +127,7 @@ func createChannelCmdF(cmd *cobra.Command, args []string) error {
 		Header:      header,
 		Purpose:     purpose,
 		Type:        channelType,
-		CreatorId:   c.Session.UserId,
+		CreatorId:   "",
 	}
 
 	if _, err := app.CreateChannel(channel, false); err != nil {
@@ -166,7 +166,7 @@ func removeUserFromChannel(channel *model.Channel, user *model.User, userArg str
 		CommandPrintErrorln("Can't find user '" + userArg + "'")
 		return
 	}
-	if err := api.RemoveUserFromChannel(user.Id, "", channel); err != nil {
+	if err := app.RemoveUserFromChannel(user.Id, "", channel); err != nil {
 		CommandPrintErrorln("Unable to remove '" + userArg + "' from " + channel.Name + ". Error: " + err.Error())
 	}
 }

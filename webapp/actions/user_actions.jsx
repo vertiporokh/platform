@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import AppDispatcher from 'dispatcher/app_dispatcher.jsx';
@@ -8,13 +8,16 @@ import TeamStore from 'stores/team_store.jsx';
 import UserStore from 'stores/user_store.jsx';
 import ChannelStore from 'stores/channel_store.jsx';
 
+import {getChannelMembersForUserIds} from 'actions/channel_actions.jsx';
 import {loadStatusesForProfilesList, loadStatusesForProfilesMap} from 'actions/status_actions.jsx';
 
 import {getDirectChannelName} from 'utils/utils.jsx';
+
 import * as AsyncClient from 'utils/async_client.jsx';
 import Client from 'client/web_client.jsx';
 
-import {ActionTypes, Preferences} from 'utils/constants.jsx';
+import {Constants, ActionTypes, Preferences} from 'utils/constants.jsx';
+import {browserHistory} from 'react-router/es6';
 
 export function switchFromLdapToEmail(email, password, token, ldapPassword, onSuccess, onError) {
     Client.ldapToEmail(
@@ -130,6 +133,29 @@ export function loadTeamMembersForProfilesList(profiles, teamId = TeamStore.getC
     loadTeamMembersForProfiles(list, teamId, success, error);
 }
 
+export function loadProfilesWithoutTeam(page, perPage, success, error) {
+    Client.getProfilesWithoutTeam(
+        page,
+        perPage,
+        (data) => {
+            AppDispatcher.handleServerAction({
+                type: ActionTypes.RECEIVED_PROFILES_WITHOUT_TEAM,
+                profiles: data,
+                page
+            });
+
+            loadStatusesForProfilesMap(data);
+        },
+        (err) => {
+            AsyncClient.dispatchError(err, 'getProfilesWithoutTeam');
+
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
 function loadTeamMembersForProfiles(userIds, teamId, success, error) {
     Client.getTeamMembersByIds(
         teamId,
@@ -180,7 +206,7 @@ export function loadChannelMembersForProfilesMap(profiles, channelId = ChannelSt
         return;
     }
 
-    loadChannelMembersForProfiles(list, channelId, success, error);
+    getChannelMembersForUserIds(channelId, list, success, error);
 }
 
 export function loadTeamMembersAndChannelMembersForProfilesList(profiles, teamId = TeamStore.getCurrentId(), channelId = ChannelStore.getCurrentId(), success, error) {
@@ -207,37 +233,7 @@ export function loadChannelMembersForProfilesList(profiles, channelId = ChannelS
         return;
     }
 
-    loadChannelMembersForProfiles(list, channelId, success, error);
-}
-
-function loadChannelMembersForProfiles(userIds, channelId, success, error) {
-    Client.getChannelMembersByIds(
-        channelId,
-        userIds,
-        (data) => {
-            const memberMap = {};
-            for (let i = 0; i < data.length; i++) {
-                memberMap[data[i].user_id] = data[i];
-            }
-
-            AppDispatcher.handleServerAction({
-                type: ActionTypes.RECEIVED_MEMBERS_IN_CHANNEL,
-                channel_id: channelId,
-                channel_members: memberMap
-            });
-
-            if (success) {
-                success(data);
-            }
-        },
-        (err) => {
-            AsyncClient.dispatchError(err, 'getChannelMembersByIds');
-
-            if (error) {
-                error(err);
-            }
-        }
-    );
+    getChannelMembersForUserIds(channelId, list, success, error);
 }
 
 function populateDMChannelsWithProfiles(userIds) {
@@ -252,19 +248,154 @@ function populateDMChannelsWithProfiles(userIds) {
     }
 }
 
-export function loadProfilesAndTeamMembersForDMSidebar() {
-    const dmPrefs = PreferenceStore.getCategory(Preferences.CATEGORY_DIRECT_CHANNEL_SHOW);
-    const teamId = TeamStore.getCurrentId();
-    const profilesToLoad = [];
-    const membersToLoad = [];
+function populateChannelWithProfiles(channelId, userIds) {
+    for (let i = 0; i < userIds.length; i++) {
+        UserStore.saveUserIdInChannel(channelId, userIds[i]);
+    }
+    UserStore.emitInChannelChange();
+}
 
-    for (const [key, value] of dmPrefs) {
-        if (value === 'true') {
-            if (!UserStore.hasProfile(key)) {
-                profilesToLoad.push(key);
-            }
-            membersToLoad.push(key);
+export function loadNewDMIfNeeded(userId) {
+    if (userId === UserStore.getCurrentId()) {
+        return;
+    }
+
+    const pref = PreferenceStore.getBool(Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, userId, false);
+    if (pref === false) {
+        PreferenceStore.setPreference(Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, userId, 'true');
+        AsyncClient.savePreference(Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, userId, 'true');
+        loadProfilesForDM();
+    }
+}
+
+export function loadNewGMIfNeeded(channelId, userId) {
+    if (userId === UserStore.getCurrentId()) {
+        return;
+    }
+
+    function checkPreference() {
+        const pref = PreferenceStore.getBool(Preferences.CATEGORY_GROUP_CHANNEL_SHOW, channelId, false);
+        if (pref === false) {
+            PreferenceStore.setPreference(Preferences.CATEGORY_GROUP_CHANNEL_SHOW, channelId, 'true');
+            AsyncClient.savePreference(Preferences.CATEGORY_GROUP_CHANNEL_SHOW, channelId, 'true');
+            loadProfilesForGM();
         }
+    }
+
+    const channel = ChannelStore.get(channelId);
+    if (channel) {
+        checkPreference();
+    } else {
+        Client.getChannel(
+            channelId,
+            (data) => {
+                AppDispatcher.handleServerAction({
+                    type: ActionTypes.RECEIVED_CHANNEL,
+                    channel: data.channel,
+                    member: data.member
+                });
+
+                checkPreference();
+            },
+            (err) => {
+                AsyncClient.dispatchError(err, 'getChannel');
+            }
+       );
+    }
+}
+
+export function loadProfilesForSidebar() {
+    loadProfilesForDM();
+    loadProfilesForGM();
+}
+
+export function loadProfilesForGM() {
+    const channels = ChannelStore.getChannels();
+    const newPreferences = [];
+
+    for (let i = 0; i < channels.length; i++) {
+        const channel = channels[i];
+        if (channel.type !== Constants.GM_CHANNEL) {
+            continue;
+        }
+
+        if (UserStore.getProfileListInChannel(channel.id).length >= Constants.MIN_USERS_IN_GM) {
+            continue;
+        }
+
+        const isVisible = PreferenceStore.getBool(Preferences.CATEGORY_GROUP_CHANNEL_SHOW, channel.id);
+
+        if (!isVisible) {
+            const member = ChannelStore.getMyMember(channel.id);
+            if (!member || (member.mention_count === 0 && member.msg_count >= channel.total_msg_count)) {
+                continue;
+            }
+
+            newPreferences.push({
+                user_id: UserStore.getCurrentId(),
+                category: Preferences.CATEGORY_GROUP_CHANNEL_SHOW,
+                name: channel.id,
+                value: 'true'
+            });
+        }
+
+        Client.getProfilesInChannel(
+            channel.id,
+            0,
+            Constants.MAX_USERS_IN_GM,
+            (data) => {
+                AppDispatcher.handleServerAction({
+                    type: ActionTypes.RECEIVED_PROFILES,
+                    profiles: data
+                });
+
+                populateChannelWithProfiles(channel.id, Object.keys(data));
+            }
+        );
+    }
+
+    if (newPreferences.length > 0) {
+        AsyncClient.savePreferences(newPreferences);
+    }
+}
+
+export function loadProfilesForDM() {
+    const channels = ChannelStore.getChannels();
+    const newPreferences = [];
+    const profilesToLoad = [];
+    const profileIds = [];
+
+    for (let i = 0; i < channels.length; i++) {
+        const channel = channels[i];
+        if (channel.type !== Constants.DM_CHANNEL) {
+            continue;
+        }
+
+        const teammateId = channel.name.replace(UserStore.getCurrentId(), '').replace('__', '');
+        const isVisible = PreferenceStore.getBool(Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, teammateId);
+
+        if (!isVisible) {
+            const member = ChannelStore.getMyMember(channel.id);
+            if (!member || member.mention_count === 0) {
+                continue;
+            }
+
+            newPreferences.push({
+                user_id: UserStore.getCurrentId(),
+                category: Preferences.CATEGORY_DIRECT_CHANNEL_SHOW,
+                name: teammateId,
+                value: 'true'
+            });
+        }
+
+        if (!UserStore.hasProfile(teammateId)) {
+            profilesToLoad.push(teammateId);
+        }
+        profileIds.push(teammateId);
+    }
+
+    if (newPreferences.length > 0) {
+        AsyncClient.savePreferences(newPreferences);
     }
 
     if (profilesToLoad.length > 0) {
@@ -277,44 +408,14 @@ export function loadProfilesAndTeamMembersForDMSidebar() {
                 });
 
                 // Use membersToLoad so we get all the DM profiles even if they were already loaded
-                populateDMChannelsWithProfiles(membersToLoad);
+                populateDMChannelsWithProfiles(profileIds);
             },
             (err) => {
                 AsyncClient.dispatchError(err, 'getProfilesByIds');
             }
         );
     } else {
-        populateDMChannelsWithProfiles(membersToLoad);
-    }
-
-    if (membersToLoad.length > 0) {
-        Client.getTeamMembersByIds(
-            teamId,
-            membersToLoad,
-            (data) => {
-                const memberMap = {};
-                for (let i = 0; i < data.length; i++) {
-                    memberMap[data[i].user_id] = data[i];
-                }
-
-                const nonMembersMap = {};
-                for (let i = 0; i < membersToLoad.length; i++) {
-                    if (!memberMap[membersToLoad[i]]) {
-                        nonMembersMap[membersToLoad[i]] = true;
-                    }
-                }
-
-                AppDispatcher.handleServerAction({
-                    type: ActionTypes.RECEIVED_MEMBERS_IN_TEAM,
-                    team_id: teamId,
-                    team_members: memberMap,
-                    non_team_members: nonMembersMap
-                });
-            },
-            (err) => {
-                AsyncClient.dispatchError(err, 'getTeamMembersByIds');
-            }
-        );
+        populateDMChannelsWithProfiles(profileIds);
     }
 }
 
@@ -383,6 +484,28 @@ export function searchUsers(term, teamId = TeamStore.getCurrentId(), options = {
         },
         (err) => {
             AsyncClient.dispatchError(err, 'searchUsers');
+
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function searchUsersNotInTeam(term, teamId = TeamStore.getCurrentId(), options = {}, success, error) {
+    Client.searchUsersNotInTeam(
+        term,
+        teamId,
+        options,
+        (data) => {
+            loadStatusesForProfilesList(data);
+
+            if (success) {
+                success(data);
+            }
+        },
+        (err) => {
+            AsyncClient.dispatchError(err, 'searchUsersNotInTeam');
 
             if (error) {
                 error(err);
@@ -482,12 +605,11 @@ export function generateMfaSecret(success, error) {
     );
 }
 
-export function updateUserRoles(userId, newRoles, success, error) {
-    Client.updateUserRoles(
-      userId,
-      newRoles,
+export function updateUserNotifyProps(data, success, error) {
+    Client.updateUserNotifyProps(
+      data,
       () => {
-          AsyncClient.getUser(userId);
+          AsyncClient.getMe();
 
           if (success) {
               success();
@@ -501,10 +623,44 @@ export function updateUserRoles(userId, newRoles, success, error) {
     );
 }
 
+export function updateUserRoles(userId, newRoles, success, error) {
+    Client.updateUserRoles(
+        userId,
+        newRoles,
+        () => {
+            AsyncClient.getUser(
+                userId,
+                success,
+                error
+            );
+        },
+        error
+    );
+}
+
 export function activateMfa(code, success, error) {
     Client.updateMfa(
         code,
         true,
+        () => {
+            AsyncClient.getMe();
+
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function deactivateMfa(success, error) {
+    Client.updateMfa(
+        '',
+        false,
         () => {
             AsyncClient.getMe();
 
@@ -530,7 +686,7 @@ export function checkMfa(loginId, success, error) {
         loginId,
         (data) => {
             if (success) {
-                success(data.mfa_required === 'true');
+                success(data && data.mfa_required === 'true');
             }
         },
         (err) => {
@@ -543,18 +699,17 @@ export function checkMfa(loginId, success, error) {
 
 export function updateActive(userId, active, success, error) {
     Client.updateActive(userId, active,
-        () => {
-            AsyncClient.getUser(userId);
+        (data) => {
+            AppDispatcher.handleServerAction({
+                type: ActionTypes.RECEIVED_PROFILE,
+                profile: data
+            });
 
             if (success) {
-                success();
+                success(data);
             }
         },
-        (err) => {
-            if (error) {
-                error(err);
-            }
-        }
+        error
     );
 }
 
@@ -571,4 +726,209 @@ export function updatePassword(userId, currentPassword, newPassword, success, er
             }
         }
     );
+}
+
+export function verifyEmail(uid, hid, success, error) {
+    Client.verifyEmail(
+        uid,
+        hid,
+        (data) => {
+            if (success) {
+                success(data);
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function resetPassword(code, password, success, error) {
+    Client.resetPassword(
+        code,
+        password,
+        () => {
+            browserHistory.push('/login?extra=' + ActionTypes.PASSWORD_CHANGE);
+
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function resendVerification(email, success, error) {
+    Client.resendVerification(
+        email,
+        () => {
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function loginById(userId, password, mfaToken, success, error) {
+    Client.loginById(
+        userId,
+        password,
+        mfaToken,
+        () => {
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function createUserWithInvite(user, data, emailHash, inviteId, success, error) {
+    Client.createUserWithInvite(
+        user,
+        data,
+        emailHash,
+        inviteId,
+        (response) => {
+            if (success) {
+                success(response);
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function webLogin(loginId, password, token, success, error) {
+    Client.webLogin(
+        loginId,
+        password,
+        token,
+        () => {
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function webLoginByLdap(loginId, password, token, success, error) {
+    Client.webLoginByLdap(
+        loginId,
+        password,
+        token,
+        (data) => {
+            if (success) {
+                success(data);
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function getAuthorizedApps(success, error) {
+    Client.getAuthorizedApps(
+        (authorizedApps) => {
+            if (success) {
+                success(authorizedApps);
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        });
+}
+
+export function deauthorizeOAuthApp(appId, success, error) {
+    Client.deauthorizeOAuthApp(
+        appId,
+        () => {
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        });
+}
+
+export function uploadProfileImage(userPicture, success, error) {
+    Client.uploadProfileImage(
+        userPicture,
+        () => {
+            AsyncClient.getMe();
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function loadProfiles(offset = UserStore.getPagingOffset(), limit = Constants.PROFILE_CHUNK_SIZE, success, error) {
+    Client.getProfiles(
+        offset,
+        limit,
+        (data) => {
+            AppDispatcher.handleServerAction({
+                type: ActionTypes.RECEIVED_PROFILES,
+                profiles: data
+            });
+
+            if (success) {
+                success(data);
+            }
+        },
+        (err) => {
+            AsyncClient.dispatchError(err, 'getProfiles');
+
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function getMissingProfiles(ids, success, error) {
+    const missingIds = ids.filter((id) => !UserStore.hasProfile(id));
+
+    if (missingIds.length === 0) {
+        return;
+    }
+
+    AsyncClient.getProfilesByIds(missingIds, success, error);
 }

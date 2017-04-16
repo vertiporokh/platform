@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -165,7 +165,7 @@ func ParseSearchParams(text string) []*SearchParams {
 	if len(plainTerms) == 0 && len(hashtagTerms) == 0 && (len(inChannels) != 0 || len(fromUsers) != 0) {
 		paramsList = append(paramsList, &SearchParams{
 			Terms:      "",
-			IsHashtag:  true,
+			IsHashtag:  false,
 			InChannels: inChannels,
 			FromUsers:  fromUsers,
 		})

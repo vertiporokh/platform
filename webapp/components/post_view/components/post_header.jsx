@@ -1,8 +1,9 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import UserProfile from 'components/user_profile.jsx';
 import PostInfo from './post_info.jsx';
+import {FormattedMessage} from 'react-intl';
 
 import * as PostUtils from 'utils/post_utils.jsx';
 
@@ -55,7 +56,12 @@ export default class PostHeader extends React.Component {
             userProfile = (
                 <UserProfile
                     user={{}}
-                    overwriteName={Constants.SYSTEM_MESSAGE_PROFILE_NAME}
+                    overwriteName={
+                        <FormattedMessage
+                            id='post_info.system'
+                            defaultMessage='System'
+                        />
+                    }
                     overwriteImage={Constants.SYSTEM_MESSAGE_PROFILE_IMAGE}
                     disablePopover={true}
                 />

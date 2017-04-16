@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -160,6 +160,22 @@ func TestRecycleDatabaseConnection(t *testing.T) {
 func TestEmailTest(t *testing.T) {
 	th := Setup().InitBasic().InitSystemAdmin()
 
+	SendEmailNotifications := utils.Cfg.EmailSettings.SendEmailNotifications
+	SMTPServer := utils.Cfg.EmailSettings.SMTPServer
+	SMTPPort := utils.Cfg.EmailSettings.SMTPPort
+	FeedbackEmail := utils.Cfg.EmailSettings.FeedbackEmail
+	defer func() {
+		utils.Cfg.EmailSettings.SendEmailNotifications = SendEmailNotifications
+		utils.Cfg.EmailSettings.SMTPServer = SMTPServer
+		utils.Cfg.EmailSettings.SMTPPort = SMTPPort
+		utils.Cfg.EmailSettings.FeedbackEmail = FeedbackEmail
+	}()
+
+	utils.Cfg.EmailSettings.SendEmailNotifications = false
+	utils.Cfg.EmailSettings.SMTPServer = ""
+	utils.Cfg.EmailSettings.SMTPPort = ""
+	utils.Cfg.EmailSettings.FeedbackEmail = ""
+
 	if _, err := th.BasicClient.TestEmail(utils.Cfg); err == nil {
 		t.Fatal("Shouldn't have permissions")
 	}
@@ -209,7 +225,7 @@ func TestGetTeamAnalyticsStandard(t *testing.T) {
 			t.Fatal()
 		}
 
-		if rows[0].Value != 3 {
+		if rows[0].Value != 4 {
 			t.Log(rows.ToJson())
 			t.Fatal()
 		}
@@ -229,7 +245,7 @@ func TestGetTeamAnalyticsStandard(t *testing.T) {
 			t.Fatal()
 		}
 
-		if rows[2].Value != 5 {
+		if rows[2].Value != 6 {
 			t.Log(rows.ToJson())
 			t.Fatal()
 		}

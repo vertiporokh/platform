@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import EmojiStore from 'stores/emoji_store.jsx';
@@ -31,7 +31,7 @@ export function handleEmoticons(text, tokens, emojis) {
 
     function replaceEmoticonWithToken(fullMatch, prefix, matchText, name) {
         const index = tokens.size;
-        const alias = `MM_EMOTICON${index}`;
+        const alias = `$MM_EMOTICON${index}`;
 
         if (emojis.has(name)) {
             const path = EmojiStore.getEmojiImageUrl(emojis.get(name));

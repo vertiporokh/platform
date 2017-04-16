@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import * as Utils from 'utils/utils.jsx';
@@ -111,12 +111,10 @@ export default class OAuthSettings extends AdminSettings {
 
     renderTitle() {
         return (
-            <h3>
-                <FormattedMessage
-                    id='admin.authentication.oauth'
-                    defaultMessage='OAuth 2.0'
-                />
-            </h3>
+            <FormattedMessage
+                id='admin.authentication.oauth'
+                defaultMessage='OAuth 2.0'
+            />
         );
     }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package store
@@ -424,6 +424,51 @@ func TestPreferenceDeleteCategory(t *testing.T) {
 	}
 
 	if prefs := Must(store.Preference().GetAll(userId)).(model.Preferences); len([]model.Preference(prefs)) != 0 {
+		t.Fatal("should've returned no preferences")
+	}
+}
+
+func TestPreferenceDeleteCategoryAndName(t *testing.T) {
+	Setup()
+
+	category := model.NewId()
+	name := model.NewId()
+	userId := model.NewId()
+	userId2 := model.NewId()
+
+	preference1 := model.Preference{
+		UserId:   userId,
+		Category: category,
+		Name:     name,
+		Value:    "value1a",
+	}
+
+	preference2 := model.Preference{
+		UserId:   userId2,
+		Category: category,
+		Name:     name,
+		Value:    "value1a",
+	}
+
+	Must(store.Preference().Save(&model.Preferences{preference1, preference2}))
+
+	if prefs := Must(store.Preference().GetAll(userId)).(model.Preferences); len([]model.Preference(prefs)) != 1 {
+		t.Fatal("should've returned 1 preference")
+	}
+
+	if prefs := Must(store.Preference().GetAll(userId2)).(model.Preferences); len([]model.Preference(prefs)) != 1 {
+		t.Fatal("should've returned 1 preference")
+	}
+
+	if result := <-store.Preference().DeleteCategoryAndName(category, name); result.Err != nil {
+		t.Fatal(result.Err)
+	}
+
+	if prefs := Must(store.Preference().GetAll(userId)).(model.Preferences); len([]model.Preference(prefs)) != 0 {
+		t.Fatal("should've returned no preferences")
+	}
+
+	if prefs := Must(store.Preference().GetAll(userId2)).(model.Preferences); len([]model.Preference(prefs)) != 0 {
 		t.Fatal("should've returned no preferences")
 	}
 }

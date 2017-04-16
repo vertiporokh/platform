@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -8,7 +8,6 @@ import (
 	"crypto/sha1"
 	"crypto/tls"
 	"encoding/base64"
-	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,8 +23,6 @@ func InitWebrtc() {
 	l4g.Debug(utils.T("api.webrtc.init.debug"))
 
 	BaseRoutes.Webrtc.Handle("/token", ApiUserRequired(webrtcToken)).Methods("POST")
-
-	app.Srv.WebSocketRouter.Handle("webrtc", ApiWebSocketHandler(webrtcMessage))
 }
 
 func webrtcToken(c *Context, w http.ResponseWriter, r *http.Request) {
@@ -53,20 +50,6 @@ func webrtcToken(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func webrtcMessage(req *model.WebSocketRequest) (map[string]interface{}, *model.AppError) {
-	var ok bool
-	var toUserId string
-	if toUserId, ok = req.Data["to_user_id"].(string); !ok || len(toUserId) != 26 {
-		return nil, NewInvalidWebSocketParamError(req.Action, "to_user_id")
-	}
-
-	event := model.NewWebSocketEvent(model.WEBSOCKET_EVENT_WEBRTC, "", "", toUserId, nil)
-	event.Data = req.Data
-	go app.Publish(event)
-
-	return nil, nil
-}
-
 func getWebrtcToken(sessionId string) (string, *model.AppError) {
 	if !*utils.Cfg.WebrtcSettings.Enable {
 		return "", model.NewLocAppError("WebRTC.getWebrtcToken", "api.webrtc.disabled.app_error", nil, "")
@@ -90,7 +73,7 @@ func getWebrtcToken(sessionId string) (string, *model.AppError) {
 	if rp, err := httpClient.Do(rq); err != nil {
 		return "", model.NewLocAppError("WebRTC.Token", "model.client.connecting.app_error", nil, err.Error())
 	} else if rp.StatusCode >= 300 {
-		defer closeBody(rp)
+		defer app.CloseBody(rp)
 		return "", model.AppErrorFromJson(rp.Body)
 	} else {
 		janusResponse := model.GatewayResponseFromJson(rp.Body)
@@ -107,11 +90,4 @@ func generateTurnPassword(username string, secret string) string {
 	h := hmac.New(sha1.New, key)
 	h.Write([]byte(username))
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
-}
-
-func closeBody(r *http.Response) {
-	if r.Body != nil {
-		ioutil.ReadAll(r.Body)
-		r.Body.Close()
-	}
 }

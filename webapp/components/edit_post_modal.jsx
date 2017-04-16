@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import Textbox from './textbox.jsx';
@@ -93,7 +93,9 @@ export default class EditPostModal extends React.Component {
             updatedPost,
             () => {
                 window.scrollTo(0, 0);
-            });
+            },
+            Boolean(PostStore.getFocusedPostId())  // If there is focused post we need to update that post's store too.
+        );
 
         $('#edit_post').modal('hide');
     }
@@ -118,6 +120,17 @@ export default class EditPostModal extends React.Component {
     }
 
     handleEditPostEvent(options) {
+        var post = PostStore.getPost(options.channelId, options.postId);
+        if (global.window.mm_license.IsLicensed === 'true') {
+            if (global.window.mm_config.AllowEditPost === Constants.ALLOW_EDIT_POST_NEVER) {
+                return;
+            }
+            if (global.window.mm_config.AllowEditPost === Constants.ALLOW_EDIT_POST_TIME_LIMIT) {
+                if ((post.create_at + (global.window.mm_config.PostEditTimeLimit * 1000)) < Utils.getTimestamp()) {
+                    return;
+                }
+            }
+        }
         this.setState({
             editText: options.message || '',
             originalText: options.message || '',
@@ -171,9 +184,14 @@ export default class EditPostModal extends React.Component {
     }
 
     onModalHide() {
+        this.refs.editbox.hidePreview();
+
         if (this.state.refocusId !== '') {
             setTimeout(() => {
-                $(this.state.refocusId).get(0).focus();
+                const element = $(this.state.refocusId).get(0);
+                if (element) {
+                    element.focus();
+                }
             });
         }
     }

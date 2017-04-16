@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import * as Utils from 'utils/utils.jsx';
@@ -81,7 +81,7 @@ export default class ProfilePopover extends React.Component {
         this.setState({loadingDMChannel: user.id});
 
         openDirectChannelToUser(
-            user,
+            user.id,
             (channel) => {
                 if (Utils.isMobile()) {
                     GlobalActions.emitCloseRightHandSide();
@@ -246,7 +246,7 @@ export default class ProfilePopover extends React.Component {
                 <div
                     data-toggle='tooltip'
                     key='user-popover-dm'
-                    className='popover-dm__content'
+                    className='popover__row'
                 >
                     <a
                         href='#'

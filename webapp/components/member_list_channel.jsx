@@ -1,8 +1,8 @@
-// Copyright (c) 2017 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import ChannelMembersDropdown from 'components/channel_members_dropdown.jsx';
-import SearchableUserList from 'components/searchable_user_list.jsx';
+import SearchableUserList from 'components/searchable_user_list/searchable_user_list_container.jsx';
 
 import ChannelStore from 'stores/channel_store.jsx';
 import UserStore from 'stores/user_store.jsx';
@@ -91,6 +91,8 @@ export default class MemberListChannel extends React.Component {
     }
 
     search(term) {
+        clearTimeout(this.searchTimeoutId);
+
         if (term === '') {
             this.setState({
                 search: false,
@@ -99,10 +101,9 @@ export default class MemberListChannel extends React.Component {
                 teamMembers: Object.assign([], TeamStore.getMembersInTeam()),
                 channelMembers: Object.assign([], ChannelStore.getMembersInChannel())
             });
+            this.searchTimeoutId = '';
             return;
         }
-
-        clearTimeout(this.searchTimeoutId);
 
         this.searchTimeoutId = setTimeout(
             () => {

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -61,13 +61,12 @@ var BaseRoutes *Routes
 func InitRouter() {
 	app.Srv.Router = mux.NewRouter()
 	app.Srv.Router.NotFoundHandler = http.HandlerFunc(Handle404)
-	app.Srv.WebSocketRouter = app.NewWebSocketRouter()
 }
 
 func InitApi() {
 	BaseRoutes = &Routes{}
 	BaseRoutes.Root = app.Srv.Router
-	BaseRoutes.ApiRoot = app.Srv.Router.PathPrefix(model.API_URL_SUFFIX).Subrouter()
+	BaseRoutes.ApiRoot = app.Srv.Router.PathPrefix(model.API_URL_SUFFIX_V3).Subrouter()
 	BaseRoutes.Users = BaseRoutes.ApiRoot.PathPrefix("/users").Subrouter()
 	BaseRoutes.NeedUser = BaseRoutes.Users.PathPrefix("/{user_id:[A-Za-z0-9]+}").Subrouter()
 	BaseRoutes.Teams = BaseRoutes.ApiRoot.PathPrefix("/teams").Subrouter()

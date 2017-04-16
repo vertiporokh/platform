@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package app
@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"hash/fnv"
 	"runtime"
+	"runtime/debug"
+	"sync/atomic"
 
 	l4g "github.com/alecthomas/log4go"
 
@@ -16,12 +18,14 @@ import (
 )
 
 type Hub struct {
-	connections    map[*WebConn]bool
+	connections    []*WebConn
+	count          int64
 	register       chan *WebConn
 	unregister     chan *WebConn
 	broadcast      chan *model.WebSocketEvent
 	stop           chan string
 	invalidateUser chan string
+	ExplicitStop   bool
 }
 
 var hubs []*Hub = make([]*Hub, 0)
@@ -30,22 +34,23 @@ func NewWebHub() *Hub {
 	return &Hub{
 		register:       make(chan *WebConn),
 		unregister:     make(chan *WebConn),
-		connections:    make(map[*WebConn]bool, model.SESSION_CACHE_SIZE),
+		connections:    make([]*WebConn, 0, model.SESSION_CACHE_SIZE),
 		broadcast:      make(chan *model.WebSocketEvent, 4096),
 		stop:           make(chan string),
 		invalidateUser: make(chan string),
+		ExplicitStop:   false,
 	}
 }
 
 func TotalWebsocketConnections() int {
 	// This is racy, but it's only used for reporting information
 	// so it's probably OK
-	count := 0
+	count := int64(0)
 	for _, hub := range hubs {
-		count = count + len(hub.connections)
+		count = count + atomic.LoadInt64(&hub.count)
 	}
 
-	return count
+	return int(count)
 }
 
 func HubStart() {
@@ -86,7 +91,11 @@ func HubUnregister(webConn *WebConn) {
 }
 
 func Publish(message *model.WebSocketEvent) {
-	message.DoPreComputeJson()
+
+	if metrics := einterfaces.GetMetricsInterface(); metrics != nil {
+		metrics.IncrementWebsocketEvent(message.Event)
+	}
+
 	for _, hub := range hubs {
 		hub.Broadcast(message)
 	}
@@ -97,24 +106,52 @@ func Publish(message *model.WebSocketEvent) {
 }
 
 func PublishSkipClusterSend(message *model.WebSocketEvent) {
-	message.DoPreComputeJson()
 	for _, hub := range hubs {
 		hub.Broadcast(message)
 	}
 }
 
-func InvalidateCacheForChannel(channelId string) {
-	InvalidateCacheForChannelSkipClusterSend(channelId)
+func InvalidateCacheForChannel(channel *model.Channel) {
+	InvalidateCacheForChannelSkipClusterSend(channel.Id)
+	InvalidateCacheForChannelByNameSkipClusterSend(channel.TeamId, channel.Name)
 
 	if cluster := einterfaces.GetClusterInterface(); cluster != nil {
-		cluster.InvalidateCacheForChannel(channelId)
+		cluster.InvalidateCacheForChannel(channel.Id)
+		cluster.InvalidateCacheForChannelByName(channel.TeamId, channel.Name)
+	}
+}
+
+func InvalidateCacheForChannelMembers(channelId string) {
+	InvalidateCacheForChannelMembersSkipClusterSend(channelId)
+
+	if cluster := einterfaces.GetClusterInterface(); cluster != nil {
+		cluster.InvalidateCacheForChannelMembers(channelId)
 	}
 }
 
 func InvalidateCacheForChannelSkipClusterSend(channelId string) {
+	Srv.Store.Channel().InvalidateChannel(channelId)
+}
+
+func InvalidateCacheForChannelMembersSkipClusterSend(channelId string) {
 	Srv.Store.User().InvalidateProfilesInChannelCache(channelId)
 	Srv.Store.Channel().InvalidateMemberCount(channelId)
-	Srv.Store.Channel().InvalidateChannel(channelId)
+}
+
+func InvalidateCacheForChannelMembersNotifyProps(channelId string) {
+	InvalidateCacheForChannelMembersNotifyPropsSkipClusterSend(channelId)
+
+	if cluster := einterfaces.GetClusterInterface(); cluster != nil {
+		cluster.InvalidateCacheForChannelMembersNotifyProps(channelId)
+	}
+}
+
+func InvalidateCacheForChannelMembersNotifyPropsSkipClusterSend(channelId string) {
+	Srv.Store.Channel().InvalidateCacheForChannelMembersNotifyProps(channelId)
+}
+
+func InvalidateCacheForChannelByNameSkipClusterSend(teamId, name string) {
+	Srv.Store.Channel().InvalidateChannelByName(teamId, name)
 }
 
 func InvalidateCacheForChannelPosts(channelId string) {
@@ -147,10 +184,34 @@ func InvalidateCacheForUserSkipClusterSend(userId string) {
 	}
 }
 
+func InvalidateCacheForWebhook(webhookId string) {
+	InvalidateCacheForWebhookSkipClusterSend(webhookId)
+
+	if cluster := einterfaces.GetClusterInterface(); cluster != nil {
+		cluster.InvalidateCacheForWebhook(webhookId)
+	}
+}
+
+func InvalidateCacheForWebhookSkipClusterSend(webhookId string) {
+	Srv.Store.Webhook().InvalidateWebhookCache(webhookId)
+}
+
 func InvalidateWebConnSessionCacheForUser(userId string) {
 	if len(hubs) != 0 {
 		GetHubForUserId(userId).InvalidateUser(userId)
 	}
+}
+
+func InvalidateCacheForReactions(postId string) {
+	InvalidateCacheForReactionsSkipClusterSend(postId)
+
+	if cluster := einterfaces.GetClusterInterface(); cluster != nil {
+		cluster.InvalidateCacheForReactions(postId)
+	}
+}
+
+func InvalidateCacheForReactionsSkipClusterSend(postId string) {
+	Srv.Store.Reaction().InvalidateCacheForPost(postId)
 }
 
 func (h *Hub) Register(webConn *WebConn) {
@@ -180,29 +241,43 @@ func (h *Hub) Stop() {
 }
 
 func (h *Hub) Start() {
-	go func() {
+	var doStart func()
+	var doRecoverableStart func()
+	var doRecover func()
+
+	doStart = func() {
 		for {
 			select {
 			case webCon := <-h.register:
-				h.connections[webCon] = true
+				h.connections = append(h.connections, webCon)
+				atomic.StoreInt64(&h.count, int64(len(h.connections)))
 
 			case webCon := <-h.unregister:
 				userId := webCon.UserId
-				if _, ok := h.connections[webCon]; ok {
-					delete(h.connections, webCon)
-					close(webCon.Send)
+
+				found := false
+				indexToDel := -1
+				for i, webConCandidate := range h.connections {
+					if webConCandidate == webCon {
+						indexToDel = i
+						continue
+					}
+					if userId == webConCandidate.UserId {
+						found = true
+						if indexToDel != -1 {
+							break
+						}
+					}
+				}
+
+				if indexToDel != -1 {
+					// Delete the webcon we are unregistering
+					h.connections[indexToDel] = h.connections[len(h.connections)-1]
+					h.connections = h.connections[:len(h.connections)-1]
 				}
 
 				if len(userId) == 0 {
 					continue
-				}
-
-				found := false
-				for webCon := range h.connections {
-					if userId == webCon.UserId {
-						found = true
-						break
-					}
 				}
 
 				if !found {
@@ -210,32 +285,60 @@ func (h *Hub) Start() {
 				}
 
 			case userId := <-h.invalidateUser:
-				for webCon := range h.connections {
+				for _, webCon := range h.connections {
 					if webCon.UserId == userId {
 						webCon.InvalidateCache()
 					}
 				}
 
 			case msg := <-h.broadcast:
-				for webCon := range h.connections {
+				for _, webCon := range h.connections {
 					if webCon.ShouldSendEvent(msg) {
 						select {
 						case webCon.Send <- msg:
 						default:
 							l4g.Error(fmt.Sprintf("webhub.broadcast: cannot send, closing websocket for userId=%v", webCon.UserId))
 							close(webCon.Send)
-							delete(h.connections, webCon)
+							for i, webConCandidate := range h.connections {
+								if webConCandidate == webCon {
+									h.connections[i] = h.connections[len(h.connections)-1]
+									h.connections = h.connections[:len(h.connections)-1]
+									break
+								}
+							}
 						}
 					}
 				}
 
 			case <-h.stop:
-				for webCon := range h.connections {
+				for _, webCon := range h.connections {
 					webCon.WebSocket.Close()
 				}
+				h.ExplicitStop = true
 
 				return
 			}
 		}
-	}()
+	}
+
+	doRecoverableStart = func() {
+		defer doRecover()
+		doStart()
+	}
+
+	doRecover = func() {
+		if !h.ExplicitStop {
+			if r := recover(); r != nil {
+				l4g.Error(fmt.Sprintf("Recovering from Hub panic. Panic was: %v", r))
+			} else {
+				l4g.Error("Webhub stopped unexpectedly. Recovering.")
+			}
+
+			l4g.Error(string(debug.Stack()))
+
+			go doRecoverableStart()
+		}
+	}
+
+	go doRecoverableStart()
 }

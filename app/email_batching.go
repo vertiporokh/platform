@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package app
@@ -208,7 +208,7 @@ func sendBatchedEmailNotification(userId string, notifications []*batchedNotific
 	body.Props["BodyText"] = translateFunc("api.email_batching.send_batched_email_notification.body_text", len(notifications))
 
 	if err := utils.SendMail(user.Email, subject, body.Render()); err != nil {
-		l4g.Warn(utils.T("api.email_batchings.send_batched_email_notification.send.app_error"), user.Email, err)
+		l4g.Warn(utils.T("api.email_batching.send_batched_email_notification.send.app_error"), user.Email, err)
 	}
 }
 
@@ -244,6 +244,8 @@ func renderBatchedPost(template *utils.HTMLTemplate, post *model.Post, teamName 
 		return ""
 	} else if channel := result.Data.(*model.Channel); channel.Type == model.CHANNEL_DIRECT {
 		template.Props["ChannelName"] = translateFunc("api.email_batching.render_batched_post.direct_message")
+	} else if channel.Type == model.CHANNEL_GROUP {
+		template.Props["ChannelName"] = translateFunc("api.email_batching.render_batched_post.group_message")
 	} else {
 		template.Props["ChannelName"] = channel.DisplayName
 	}

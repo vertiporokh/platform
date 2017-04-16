@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import ViewImageModal from './view_image.jsx';
@@ -50,7 +50,7 @@ export default class FileAttachmentList extends React.Component {
 
         return (
             <div>
-                <div className='post-image__columns'>
+                <div className='post-image__columns clearfix'>
                     {postFiles}
                 </div>
                 <ViewImageModal

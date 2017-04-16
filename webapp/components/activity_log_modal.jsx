@@ -1,11 +1,10 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import LoadingScreen from './loading_screen.jsx';
 
 import UserStore from 'stores/user_store.jsx';
 
-import Client from 'client/web_client.jsx';
 import * as AsyncClient from 'utils/async_client.jsx';
 import * as Utils from 'utils/utils.jsx';
 
@@ -13,6 +12,8 @@ import $ from 'jquery';
 import React from 'react';
 import {Modal} from 'react-bootstrap';
 import {FormattedMessage, FormattedTime, FormattedDate} from 'react-intl';
+
+import {revokeSession} from 'actions/admin_actions.jsx';
 
 export default class ActivityLogModal extends React.Component {
     constructor(props) {
@@ -46,10 +47,8 @@ export default class ActivityLogModal extends React.Component {
         setTimeout(() => {
             modalContent.removeClass('animation--highlight');
         }, 1500);
-        Client.revokeSession(altId,
-            () => {
-                AsyncClient.getSessions();
-            },
+        revokeSession(altId,
+            null,
             (err) => {
                 const state = this.getStateFromStores();
                 state.serverError = err;
@@ -103,7 +102,7 @@ export default class ActivityLogModal extends React.Component {
 
             if (currentSession.props.platform === 'Windows') {
                 devicePicture = 'fa fa-windows';
-            } else if (currentSession.device_id && currentSession.device_id.indexOf('apple:') === 0) {
+            } else if (currentSession.device_id && currentSession.device_id.indexOf('apple') === 0) {
                 devicePicture = 'fa fa-apple';
                 devicePlatform = (
                     <FormattedMessage
@@ -111,7 +110,7 @@ export default class ActivityLogModal extends React.Component {
                         defaultMessage='iPhone Native App'
                     />
                 );
-            } else if (currentSession.device_id && currentSession.device_id.indexOf('android:') === 0) {
+            } else if (currentSession.device_id && currentSession.device_id.indexOf('android') === 0) {
                 devicePlatform = (
                     <FormattedMessage
                         id='activity_log_modal.androidNativeApp'
@@ -276,6 +275,7 @@ export default class ActivityLogModal extends React.Component {
 
         return (
             <Modal
+                dialogClassName='modal--scroll'
                 show={this.state.show}
                 onHide={this.onHide}
                 onExited={this.props.onHide}

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package utils
@@ -25,7 +25,7 @@ func connectToSMTPServer(config *model.Config) (net.Conn, *model.AppError) {
 
 	if config.EmailSettings.ConnectionSecurity == model.CONN_SECURITY_TLS {
 		tlsconfig := &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: *config.EmailSettings.SkipServerCertificateVerification,
 			ServerName:         config.EmailSettings.SMTPServer,
 		}
 
@@ -56,7 +56,7 @@ func newSMTPClient(conn net.Conn, config *model.Config) (*smtp.Client, *model.Ap
 		}
 	} else if config.EmailSettings.ConnectionSecurity == model.CONN_SECURITY_STARTTLS {
 		tlsconfig := &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: *config.EmailSettings.SkipServerCertificateVerification,
 			ServerName:         config.EmailSettings.SMTPServer,
 		}
 		c.StartTLS(tlsconfig)
@@ -104,8 +104,8 @@ func SendMailUsingConfig(to, subject, body string, config *model.Config) *model.
 
 	l4g.Debug(T("utils.mail.send_mail.sending.debug"), to, subject)
 
-	fromMail := mail.Address{config.EmailSettings.FeedbackName, config.EmailSettings.FeedbackEmail}
-	toMail := mail.Address{"", to}
+	fromMail := mail.Address{Name: config.EmailSettings.FeedbackName, Address: config.EmailSettings.FeedbackEmail}
+	toMail := mail.Address{Name: "", Address: to}
 
 	headers := make(map[string]string)
 	headers["From"] = fromMail.String()

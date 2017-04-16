@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -35,12 +35,14 @@ const (
 	STATUS                    = "status"
 	STATUS_OK                 = "OK"
 	STATUS_FAIL               = "FAIL"
+	STATUS_REMOVE             = "REMOVE"
 
 	CLIENT_DIR = "webapp/dist"
 
 	API_URL_SUFFIX_V1 = "/api/v1"
 	API_URL_SUFFIX_V3 = "/api/v3"
-	API_URL_SUFFIX    = API_URL_SUFFIX_V3
+	API_URL_SUFFIX_V4 = "/api/v4"
+	API_URL_SUFFIX    = API_URL_SUFFIX_V4
 )
 
 type Result struct {
@@ -71,7 +73,7 @@ type Client struct {
 // NewClient constructs a new client with convienence methods for talking to
 // the server.
 func NewClient(url string) *Client {
-	return &Client{url, url + API_URL_SUFFIX, &http.Client{}, "", "", "", "", "", ""}
+	return &Client{url, url + API_URL_SUFFIX_V3, &http.Client{}, "", "", "", "", "", ""}
 }
 
 func closeBody(r *http.Response) {
@@ -782,7 +784,7 @@ func (c *Client) GetSessions(id string) (*Result, *AppError) {
 }
 
 func (c *Client) EmailToOAuth(m map[string]string) (*Result, *AppError) {
-	if r, err := c.DoApiPost("/users/claim/email_to_sso", MapToJson(m)); err != nil {
+	if r, err := c.DoApiPost("/users/claim/email_to_oauth", MapToJson(m)); err != nil {
 		return nil, err
 	} else {
 		defer closeBody(r)
@@ -1119,6 +1121,16 @@ func (c *Client) CreateDirectChannel(userId string) (*Result, *AppError) {
 	}
 }
 
+func (c *Client) CreateGroupChannel(userIds []string) (*Result, *AppError) {
+	if r, err := c.DoApiPost(c.GetTeamRoute()+"/channels/create_group", ArrayToJson(userIds)); err != nil {
+		return nil, err
+	} else {
+		defer closeBody(r)
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), ChannelFromJson(r.Body)}, nil
+	}
+}
+
 func (c *Client) UpdateChannel(channel *Channel) (*Result, *AppError) {
 	if r, err := c.DoApiPost(c.GetTeamRoute()+"/channels/update", channel.ToJson()); err != nil {
 		return nil, err
@@ -1176,17 +1188,6 @@ func (c *Client) GetChannel(id, etag string) (*Result, *AppError) {
 		defer closeBody(r)
 		return &Result{r.Header.Get(HEADER_REQUEST_ID),
 			r.Header.Get(HEADER_ETAG_SERVER), ChannelDataFromJson(r.Body)}, nil
-	}
-}
-
-// SCHEDULED FOR DEPRECATION IN 3.7 - use GetMoreChannelsPage instead
-func (c *Client) GetMoreChannels(etag string) (*Result, *AppError) {
-	if r, err := c.DoApiGet(c.GetTeamRoute()+"/channels/more", "", etag); err != nil {
-		return nil, err
-	} else {
-		defer closeBody(r)
-		return &Result{r.Header.Get(HEADER_REQUEST_ID),
-			r.Header.Get(HEADER_ETAG_SERVER), ChannelListFromJson(r.Body)}, nil
 	}
 }
 
@@ -1313,22 +1314,6 @@ func (c *Client) RemoveChannelMember(id, user_id string) (*Result, *AppError) {
 	data := make(map[string]string)
 	data["user_id"] = user_id
 	if r, err := c.DoApiPost(c.GetChannelRoute(id)+"/remove", MapToJson(data)); err != nil {
-		return nil, err
-	} else {
-		defer closeBody(r)
-		return &Result{r.Header.Get(HEADER_REQUEST_ID),
-			r.Header.Get(HEADER_ETAG_SERVER), nil}, nil
-	}
-}
-
-// UpdateLastViewedAt will mark a channel as read.
-// The channelId indicates the channel to mark as read. If active is true, push notifications
-// will be cleared if there are unread messages. The default for active is true.
-// SCHEDULED FOR DEPRECATION IN 3.8 - use ViewChannel instead
-func (c *Client) UpdateLastViewedAt(channelId string, active bool) (*Result, *AppError) {
-	data := make(map[string]interface{})
-	data["active"] = active
-	if r, err := c.DoApiPost(c.GetChannelRoute(channelId)+"/update_last_viewed_at", StringInterfaceToJson(data)); err != nil {
 		return nil, err
 	} else {
 		defer closeBody(r)
@@ -1513,6 +1498,16 @@ func (c *Client) SearchPosts(terms string, isOrSearch bool) (*Result, *AppError)
 // The page is set by the integer parameters offset and limit.
 func (c *Client) GetFlaggedPosts(offset int, limit int) (*Result, *AppError) {
 	if r, err := c.DoApiGet(c.GetTeamRoute()+fmt.Sprintf("/posts/flagged/%v/%v", offset, limit), "", ""); err != nil {
+		return nil, err
+	} else {
+		defer closeBody(r)
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), PostListFromJson(r.Body)}, nil
+	}
+}
+
+func (c *Client) GetPinnedPosts(channelId string) (*Result, *AppError) {
+	if r, err := c.DoApiGet(c.GetChannelRoute(channelId)+"/pinned", "", ""); err != nil {
 		return nil, err
 	} else {
 		defer closeBody(r)
@@ -1770,22 +1765,6 @@ func (c *Client) GetStatusesByIds(userIds []string) (*Result, *AppError) {
 	}
 }
 
-// SetActiveChannel sets the the channel id the user is currently viewing.
-// The channelId key is required but the value can be blank. Returns standard
-// response.
-// SCHEDULED FOR DEPRECATION IN 3.8 - use ViewChannel instead
-func (c *Client) SetActiveChannel(channelId string) (*Result, *AppError) {
-	data := map[string]string{}
-	data["channel_id"] = channelId
-	if r, err := c.DoApiPost("/users/status/set_active_channel", MapToJson(data)); err != nil {
-		return nil, err
-	} else {
-		defer closeBody(r)
-		return &Result{r.Header.Get(HEADER_REQUEST_ID),
-			r.Header.Get(HEADER_ETAG_SERVER), MapFromJson(r.Body)}, nil
-	}
-}
-
 func (c *Client) GetMyTeam(etag string) (*Result, *AppError) {
 	if r, err := c.DoApiGet(c.GetTeamRoute()+"/me", "", etag); err != nil {
 		return nil, err
@@ -1862,15 +1841,14 @@ func (c *Client) GetTeamStats(teamId string) (*Result, *AppError) {
 	}
 }
 
-// GetTeamStats will return a team stats object containing the number of users on the team
-// based on the team id provided. Must be authenticated.
+// GetTeamByName will return a team object based on the team name provided. Must be authenticated.
 func (c *Client) GetTeamByName(teamName string) (*Result, *AppError) {
 	if r, err := c.DoApiGet(fmt.Sprintf("/teams/name/%v", teamName), "", ""); err != nil {
 		return nil, err
 	} else {
 		defer closeBody(r)
 		return &Result{r.Header.Get(HEADER_REQUEST_ID),
-			r.Header.Get(HEADER_ETAG_SERVER), TeamStatsFromJson(r.Body)}, nil
+			r.Header.Get(HEADER_ETAG_SERVER), TeamFromJson(r.Body)}, nil
 	}
 }
 
@@ -2006,6 +1984,16 @@ func (c *Client) CreateIncomingWebhook(hook *IncomingWebhook) (*Result, *AppErro
 	}
 }
 
+func (c *Client) UpdateIncomingWebhook(hook *IncomingWebhook) (*Result, *AppError) {
+	if r, err := c.DoApiPost(c.GetTeamRoute()+"/hooks/incoming/update", hook.ToJson()); err != nil {
+		return nil, err
+	} else {
+		defer closeBody(r)
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), IncomingWebhookFromJson(r.Body)}, nil
+	}
+}
+
 func (c *Client) PostToWebhook(id, payload string) (*Result, *AppError) {
 	if r, err := c.DoPost("/hooks/"+id, payload, "application/x-www-form-urlencoded"); err != nil {
 		return nil, err
@@ -2089,6 +2077,16 @@ func (c *Client) DeletePreferences(preferences *Preferences) (bool, *AppError) {
 
 func (c *Client) CreateOutgoingWebhook(hook *OutgoingWebhook) (*Result, *AppError) {
 	if r, err := c.DoApiPost(c.GetTeamRoute()+"/hooks/outgoing/create", hook.ToJson()); err != nil {
+		return nil, err
+	} else {
+		defer closeBody(r)
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), OutgoingWebhookFromJson(r.Body)}, nil
+	}
+}
+
+func (c *Client) UpdateOutgoingWebhook(hook *OutgoingWebhook) (*Result, *AppError) {
+	if r, err := c.DoApiPost(c.GetTeamRoute()+"/hooks/outgoing/update", hook.ToJson()); err != nil {
 		return nil, err
 	} else {
 		defer closeBody(r)
@@ -2355,5 +2353,25 @@ func (c *Client) UpdateChannelRoles(channelId string, userId string, roles strin
 				RequestId:  r.Header.Get(HEADER_REQUEST_ID),
 				Etag:       r.Header.Get(HEADER_ETAG_SERVER),
 			}
+	}
+}
+
+func (c *Client) PinPost(channelId string, postId string) (*Result, *AppError) {
+	if r, err := c.DoApiPost(c.GetChannelRoute(channelId)+"/posts/"+postId+"/pin", ""); err != nil {
+		return nil, err
+	} else {
+		defer closeBody(r)
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), PostFromJson(r.Body)}, nil
+	}
+}
+
+func (c *Client) UnpinPost(channelId string, postId string) (*Result, *AppError) {
+	if r, err := c.DoApiPost(c.GetChannelRoute(channelId)+"/posts/"+postId+"/unpin", ""); err != nil {
+		return nil, err
+	} else {
+		defer closeBody(r)
+		return &Result{r.Header.Get(HEADER_REQUEST_ID),
+			r.Header.Get(HEADER_ETAG_SERVER), PostFromJson(r.Body)}, nil
 	}
 }

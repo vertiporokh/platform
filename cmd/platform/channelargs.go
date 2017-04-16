@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 package main
 
@@ -42,7 +42,7 @@ func getChannelFromChannelArg(channelArg string) *model.Channel {
 			return nil
 		}
 
-		if result := <-app.Srv.Store.Channel().GetByNameIncludeDeleted(team.Id, channelPart); result.Err == nil {
+		if result := <-app.Srv.Store.Channel().GetByNameIncludeDeleted(team.Id, channelPart, true); result.Err == nil {
 			channel = result.Data.(*model.Channel)
 		} else {
 			fmt.Println(result.Err.Error())

@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -6,6 +6,11 @@ package model
 import (
 	"encoding/json"
 	"io"
+)
+
+const (
+	EXPIRED_LICENSE_ERROR = "api.license.add_license.expired.app_error"
+	INVALID_LICENSE_ERROR = "api.license.add_license.invalid.app_error"
 )
 
 type LicenseRecord struct {

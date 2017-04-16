@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information
 
 import PostViewController from './post_view_controller.jsx';
@@ -32,7 +32,7 @@ export default class PostViewCache extends React.Component {
 
     componentWillUnmount() {
         if (UserStore.getCurrentUser()) {
-            AsyncClient.viewChannel('');
+            AsyncClient.viewChannel('', this.state.currentChannelId || '');
         }
         ChannelStore.removeChangeListener(this.onChannelChange);
     }

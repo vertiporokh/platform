@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import AppDispatcher from 'dispatcher/app_dispatcher.jsx';
@@ -6,22 +6,28 @@ import AppDispatcher from 'dispatcher/app_dispatcher.jsx';
 import TeamStore from 'stores/team_store.jsx';
 import UserStore from 'stores/user_store.jsx';
 import ChannelStore from 'stores/channel_store.jsx';
+import * as ChannelUtils from 'utils/channel_utils.jsx';
 import PreferenceStore from 'stores/preference_store.jsx';
 
-import {loadProfilesAndTeamMembersForDMSidebar} from 'actions/user_actions.jsx';
+import {loadProfilesForSidebar, loadNewDMIfNeeded, loadNewGMIfNeeded} from 'actions/user_actions.jsx';
+import {trackEvent} from 'actions/diagnostics_actions.jsx';
 
 import Client from 'client/web_client.jsx';
 import * as AsyncClient from 'utils/async_client.jsx';
 import * as UserAgent from 'utils/user_agent.jsx';
 import * as Utils from 'utils/utils.jsx';
-import {Preferences, ActionTypes} from 'utils/constants.jsx';
+import {Constants, Preferences, ActionTypes} from 'utils/constants.jsx';
 
 import {browserHistory} from 'react-router/es6';
 
 export function goToChannel(channel) {
     if (channel.fake) {
+        const user = UserStore.getProfileByUsername(channel.display_name);
+        if (!user) {
+            return;
+        }
         openDirectChannelToUser(
-            UserStore.getProfileByUsername(channel.display_name),
+            user.id,
             () => {
                 browserHistory.push(TeamStore.getCurrentTeamRelativeUrl() + '/channels/' + channel.name);
             },
@@ -125,17 +131,58 @@ export function removeUserFromChannel(channelId, userId, success, error) {
     );
 }
 
-export function openDirectChannelToUser(user, success, error) {
-    const channelName = Utils.getDirectChannelName(UserStore.getCurrentId(), user.id);
+export function makeUserChannelAdmin(channelId, userId, success, error) {
+    Client.updateChannelMemberRoles(
+        channelId,
+        userId,
+        'channel_user channel_admin',
+        () => {
+            getChannelMembersForUserIds(channelId, [userId]);
+
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function makeUserChannelMember(channelId, userId, success, error) {
+    Client.updateChannelMemberRoles(
+        channelId,
+        userId,
+        'channel_user',
+        () => {
+            getChannelMembersForUserIds(channelId, [userId]);
+
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function openDirectChannelToUser(userId, success, error) {
+    const channelName = Utils.getDirectChannelName(UserStore.getCurrentId(), userId);
     const channel = ChannelStore.getByName(channelName);
 
     if (channel) {
-        PreferenceStore.setPreference(Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, user.id, 'true');
-        loadProfilesAndTeamMembersForDMSidebar();
+        trackEvent('api', 'api_channels_join_direct');
+        PreferenceStore.setPreference(Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, userId, 'true');
+        loadProfilesForSidebar();
 
         AsyncClient.savePreference(
             Preferences.CATEGORY_DIRECT_CHANNEL_SHOW,
-            user.id,
+            userId,
             'true'
         );
 
@@ -147,7 +194,7 @@ export function openDirectChannelToUser(user, success, error) {
     }
 
     Client.createDirectChannel(
-        user.id,
+        userId,
         (data) => {
             Client.getChannel(
                 data.id,
@@ -158,12 +205,12 @@ export function openDirectChannelToUser(user, success, error) {
                         member: data2.member
                     });
 
-                    PreferenceStore.setPreference(Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, user.id, 'true');
-                    loadProfilesAndTeamMembersForDMSidebar();
+                    PreferenceStore.setPreference(Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, userId, 'true');
+                    loadProfilesForSidebar();
 
                     AsyncClient.savePreference(
                         Preferences.CATEGORY_DIRECT_CHANNEL_SHOW,
-                        user.id,
+                        userId,
                         'true'
                     );
 
@@ -182,11 +229,50 @@ export function openDirectChannelToUser(user, success, error) {
     );
 }
 
+export function openGroupChannelToUsers(userIds, success, error) {
+    Client.createGroupChannel(
+        userIds,
+        (data) => {
+            Client.getChannelMember(
+                data.id,
+                UserStore.getCurrentId(),
+                (data2) => {
+                    AppDispatcher.handleServerAction({
+                        type: ActionTypes.RECEIVED_CHANNEL,
+                        channel: data,
+                        member: data2
+                    });
+
+                    PreferenceStore.setPreference(Preferences.CATEGORY_GROUP_CHANNEL_SHOW, data.id, 'true');
+                    loadProfilesForSidebar();
+
+                    AsyncClient.savePreference(
+                        Preferences.CATEGORY_GROUP_CHANNEL_SHOW,
+                        data.id,
+                        'true'
+                    );
+
+                    if (success) {
+                        success(data);
+                    }
+                }
+            );
+        },
+        () => {
+            if (error) {
+                error();
+            }
+        }
+    );
+}
+
 export function markFavorite(channelId) {
+    trackEvent('api', 'api_channels_favorited');
     AsyncClient.savePreference(Preferences.CATEGORY_FAVORITE_CHANNEL, channelId, 'true');
 }
 
 export function unmarkFavorite(channelId) {
+    trackEvent('api', 'api_channels_unfavorited');
     const pref = {
         user_id: UserStore.getCurrentId(),
         category: Preferences.CATEGORY_FAVORITE_CHANNEL,
@@ -197,8 +283,29 @@ export function unmarkFavorite(channelId) {
 }
 
 export function loadChannelsForCurrentUser() {
-    AsyncClient.getChannels();
-    AsyncClient.getMyChannelMembers();
+    AsyncClient.getChannels().then(() => {
+        AsyncClient.getMyChannelMembers().then(() => {
+            loadDMsAndGMsForUnreads();
+        });
+    });
+}
+
+export function loadDMsAndGMsForUnreads() {
+    const unreads = ChannelStore.getUnreadCounts();
+    for (const id in unreads) {
+        if (!unreads.hasOwnProperty(id)) {
+            continue;
+        }
+
+        if (unreads[id].msgs > 0 || unreads[id].mentions > 0) {
+            const channel = ChannelStore.get(id);
+            if (channel && channel.type === Constants.DM_CHANNEL) {
+                loadNewDMIfNeeded(Utils.getUserIdFromChannelName(channel));
+            } else if (channel && channel.type === Constants.GM_CHANNEL) {
+                loadNewGMIfNeeded(channel.id);
+            }
+        }
+    }
 }
 
 export function joinChannel(channel, success, error) {
@@ -206,6 +313,7 @@ export function joinChannel(channel, success, error) {
         channel.id,
         () => {
             ChannelStore.removeMoreChannel(channel.id);
+            ChannelStore.storeChannel(channel);
 
             if (success) {
                 success();
@@ -271,9 +379,13 @@ export function autocompleteChannels(term, success, error) {
     );
 }
 
-export function updateChannelNotifyProps(data, success, error) {
-    Client.updateChannelNotifyProps(data,
+export function updateChannelNotifyProps(data, options, success, error) {
+    Client.updateChannelNotifyProps(Object.assign({}, data, options),
         () => {
+            const member = ChannelStore.getMyMember(data.channel_id);
+            member.notify_props = Object.assign(member.notify_props, options);
+            ChannelStore.storeMyChannelMember(member);
+
             if (success) {
                 success();
             }
@@ -290,27 +402,34 @@ export function createChannel(channel, success, error) {
     Client.createChannel(
         channel,
         (data) => {
-            Client.getChannel(
-                data.id,
-                (data2) => {
-                    AppDispatcher.handleServerAction({
-                        type: ActionTypes.RECEIVED_CHANNEL,
-                        channel: data2.channel,
-                        member: data2.channel
-                    });
-
-                    if (success) {
-                        success(data2);
-                    }
-                },
-                (err) => {
-                    AsyncClient.dispatchError(err, 'getChannel');
-
-                    if (error) {
-                        error(err);
-                    }
+            const existing = ChannelStore.getChannelById(data.id);
+            if (existing) {
+                if (success) {
+                    success({channel: existing});
                 }
-            );
+            } else {
+                Client.getChannel(
+                    data.id,
+                    (data2) => {
+                        AppDispatcher.handleServerAction({
+                            type: ActionTypes.RECEIVED_CHANNEL,
+                            channel: data2.channel,
+                            member: data2.channel
+                        });
+
+                        if (success) {
+                            success(data2);
+                        }
+                    },
+                    (err) => {
+                        AsyncClient.dispatchError(err, 'getChannel');
+
+                        if (error) {
+                            error(err);
+                        }
+                    }
+                );
+            }
         },
         (err) => {
             AsyncClient.dispatchError(err, 'createChannel');
@@ -320,4 +439,121 @@ export function createChannel(channel, success, error) {
             }
         }
     );
+}
+
+export function updateChannelPurpose(channelId, purposeValue, success, error) {
+    Client.updateChannelPurpose(
+        channelId,
+        purposeValue,
+        () => {
+            AsyncClient.getChannel(channelId);
+
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function updateChannelHeader(channelId, header, success, error) {
+    Client.updateChannelHeader(
+        channelId,
+        header,
+        (channelData) => {
+            AppDispatcher.handleServerAction({
+                type: ActionTypes.RECEIVED_CHANNEL,
+                channel: channelData
+            });
+
+            if (success) {
+                success(channelData);
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function getChannelMembersForUserIds(channelId, userIds, success, error) {
+    Client.getChannelMembersByIds(
+        channelId,
+        userIds,
+        (data) => {
+            const memberMap = {};
+            for (let i = 0; i < data.length; i++) {
+                memberMap[data[i].user_id] = data[i];
+            }
+
+            AppDispatcher.handleServerAction({
+                type: ActionTypes.RECEIVED_MEMBERS_IN_CHANNEL,
+                channel_id: channelId,
+                channel_members: memberMap
+            });
+
+            if (success) {
+                success(data);
+            }
+        },
+        (err) => {
+            AsyncClient.dispatchError(err, 'getChannelMembersByIds');
+
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function leaveChannel(channelId, success, error) {
+    Client.leaveChannel(channelId,
+        () => {
+            loadChannelsForCurrentUser();
+
+            if (ChannelUtils.isFavoriteChannelId(channelId)) {
+                unmarkFavorite(channelId);
+            }
+
+            const townsquare = ChannelStore.getByName('town-square');
+            browserHistory.push(TeamStore.getCurrentTeamRelativeUrl() + '/channels/' + townsquare.name);
+
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            AsyncClient.dispatchError(err, 'handleLeave');
+
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function deleteChannel(channelId, success, error) {
+    Client.deleteChannel(
+            channelId,
+            () => {
+                loadChannelsForCurrentUser();
+
+                if (success) {
+                    success();
+                }
+            },
+            (err) => {
+                AsyncClient.dispatchError(err, 'handleDelete');
+
+                if (error) {
+                    error(err);
+                }
+            }
+        );
 }

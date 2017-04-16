@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -16,16 +16,15 @@ import (
 func InitWebSocket() {
 	l4g.Debug(utils.T("api.web_socket.init.debug"))
 	BaseRoutes.Users.Handle("/websocket", ApiAppHandlerTrustRequester(connect)).Methods("GET")
-	app.HubStart()
 }
 
 func connect(c *Context, w http.ResponseWriter, r *http.Request) {
+	originChecker := utils.GetOriginChecker(r)
+
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  model.SOCKET_MAX_MESSAGE_SIZE_KB,
 		WriteBufferSize: model.SOCKET_MAX_MESSAGE_SIZE_KB,
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
+		CheckOrigin:     originChecker,
 	}
 
 	ws, err := upgrader.Upgrade(w, r, nil)
@@ -36,7 +35,11 @@ func connect(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	wc := app.NewWebConn(ws, c.Session, c.T, c.Locale)
-	app.HubRegister(wc)
+
+	if len(c.Session.UserId) > 0 {
+		app.HubRegister(wc)
+	}
+
 	go wc.WritePump()
 	wc.ReadPump()
 }

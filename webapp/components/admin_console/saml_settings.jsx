@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import React from 'react';
@@ -12,8 +12,9 @@ import RemoveFileSetting from './remove_file_setting.jsx';
 import {FormattedMessage, FormattedHTMLMessage} from 'react-intl';
 import SettingsGroup from './settings_group.jsx';
 
-import Client from 'client/web_client.jsx';
 import * as Utils from 'utils/utils.jsx';
+
+import {samlCertificateStatus, uploadCertificateFile, removeCertificateFile} from 'actions/admin_actions.jsx';
 
 export default class SamlSettings extends AdminSettings {
     constructor(props) {
@@ -73,7 +74,7 @@ export default class SamlSettings extends AdminSettings {
     }
 
     componentWillMount() {
-        Client.samlCertificateStatus(
+        samlCertificateStatus(
             (data) => {
                 const files = {};
                 if (!data.IdpCertificateFile) {
@@ -93,7 +94,7 @@ export default class SamlSettings extends AdminSettings {
     }
 
     uploadCertificate(id, file, callback) {
-        Client.uploadCertificateFile(
+        uploadCertificateFile(
             file,
             () => {
                 const fileName = file.name;
@@ -112,7 +113,7 @@ export default class SamlSettings extends AdminSettings {
     }
 
     removeCertificate(id, callback) {
-        Client.removeCertificateFile(
+        removeCertificateFile(
             this.state[id],
             () => {
                 this.handleChange(id, '');
@@ -129,12 +130,10 @@ export default class SamlSettings extends AdminSettings {
 
     renderTitle() {
         return (
-            <h3>
-                <FormattedMessage
-                    id='admin.authentication.saml'
-                    defaultMessage='SAML'
-                />
-            </h3>
+            <FormattedMessage
+                id='admin.authentication.saml'
+                defaultMessage='SAML'
+            />
         );
     }
 

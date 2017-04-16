@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import PostHeader from './post_header.jsx';
@@ -204,9 +204,7 @@ export default class Post extends React.Component {
                     src={PostUtils.getProfilePicSrcForPost(post, timestamp)}
                 />
             );
-        }
-
-        if (PostUtils.isSystemMessage(post)) {
+        } else if (PostUtils.isSystemMessage(post)) {
             profilePic = (
                 <span
                     className='icon'
@@ -237,6 +235,7 @@ export default class Post extends React.Component {
                 profilePic = (
                     <ProfilePicture
                         src=''
+                        status={status}
                     />
                 );
             }
@@ -250,7 +249,11 @@ export default class Post extends React.Component {
         }
 
         return (
-            <div>
+            <div
+                ref={(div) => {
+                    this.domNode = div;
+                }}
+            >
                 <div
                     id={'post_' + post.id}
                     className={'post ' + sameUserClass + ' ' + compactClass + ' ' + rootUser + ' ' + postType + ' ' + currentUserCss + ' ' + shouldHighlightClass + ' ' + systemMessageClass + ' ' + hideControls + ' ' + dropdownOpenedClass}
@@ -280,11 +283,13 @@ export default class Post extends React.Component {
                                 post={post}
                                 currentUser={this.props.currentUser}
                                 sameRoot={this.props.sameRoot}
+                                isLastPost={this.props.isLastPost}
                                 parentPost={parentPost}
                                 handleCommentClick={this.handleCommentClick}
                                 compactDisplay={this.props.compactDisplay}
                                 previewCollapsed={this.props.previewCollapsed}
                                 isCommentMention={this.props.isCommentMention}
+                                childComponentDidUpdateFunction={this.props.childComponentDidUpdateFunction}
                             />
                         </div>
                     </div>
@@ -301,6 +306,7 @@ Post.propTypes = {
     sameUser: React.PropTypes.bool,
     sameRoot: React.PropTypes.bool,
     hideProfilePic: React.PropTypes.bool,
+    isLastPost: React.PropTypes.bool,
     isLastComment: React.PropTypes.bool,
     shouldHighlight: React.PropTypes.bool,
     displayNameType: React.PropTypes.string,
@@ -313,5 +319,6 @@ Post.propTypes = {
     useMilitaryTime: React.PropTypes.bool.isRequired,
     isFlagged: React.PropTypes.bool,
     status: React.PropTypes.string,
-    isBusy: React.PropTypes.bool
+    isBusy: React.PropTypes.bool,
+    childComponentDidUpdateFunction: React.PropTypes.func
 };

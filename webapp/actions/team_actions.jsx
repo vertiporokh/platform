@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import UserStore from 'stores/user_store.jsx';
@@ -60,7 +60,10 @@ export function removeUserFromTeam(teamId, userId, success, error) {
         userId,
         () => {
             TeamStore.removeMemberInTeam(teamId, userId);
+            UserStore.removeProfileFromTeam(teamId, userId);
+            UserStore.emitInTeamChange();
             AsyncClient.getUser(userId);
+            AsyncClient.getTeamStats(teamId);
 
             if (success) {
                 success();
@@ -91,4 +94,92 @@ export function updateTeamMemberRoles(teamId, userId, newRoles, success, error) 
             }
         }
     );
+}
+
+export function addUserToTeamFromInvite(data, hash, inviteId, success, error) {
+    Client.addUserToTeamFromInvite(
+        data,
+        hash,
+        inviteId,
+        (team) => {
+            if (success) {
+                success(team);
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function addUsersToTeam(teamId, userIds, success, error) {
+    Client.addUsersToTeam(
+        teamId,
+        userIds,
+        (teamMembers) => {
+            teamMembers.forEach((member) => {
+                TeamStore.removeMemberNotInTeam(teamId, member.user_id);
+                UserStore.removeProfileNotInTeam(teamId, member.user_id);
+            });
+            UserStore.emitNotInTeamChange();
+
+            if (success) {
+                success(teamMembers);
+            }
+        },
+        (err) => {
+            AsyncClient.dispatchError(err, 'addUsersToTeam');
+
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function getInviteInfo(inviteId, success, error) {
+    Client.getInviteInfo(
+        inviteId,
+        (inviteData) => {
+            if (success) {
+                success(inviteData);
+            }
+        },
+        (err) => {
+            if (error) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function inviteMembers(data, success, error) {
+    Client.inviteMembers(
+        data,
+        () => {
+            if (success) {
+                success();
+            }
+        },
+        (err) => {
+            if (err) {
+                error(err);
+            }
+        }
+    );
+}
+
+export function switchTeams(url) {
+    AsyncClient.viewChannel();
+    browserHistory.push(url);
+}
+
+export function getTeamsForUser(userId, success, error) {
+    Client.getTeamsForUser(userId, success, error);
+}
+
+export function getTeamMembersForUser(userId, success, error) {
+    Client.getTeamMembersForUser(userId, success, error);
 }

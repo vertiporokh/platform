@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import AdminSettings from './admin_settings.jsx';
@@ -76,12 +76,10 @@ export default class LdapSettings extends AdminSettings {
 
     renderTitle() {
         return (
-            <h3>
-                <FormattedMessage
-                    id='admin.authentication.ldap'
-                    defaultMessage='AD/LDAP'
-                />
-            </h3>
+            <FormattedMessage
+                id='admin.authentication.ldap'
+                defaultMessage='AD/LDAP'
+            />
         );
     }
 
