@@ -190,6 +190,7 @@ export default class PostInfo extends React.Component {
             }
         }
 
+/*
         if (this.canDelete) {
             dropdownContents.push(
                 <li
@@ -212,7 +213,7 @@ export default class PostInfo extends React.Component {
                 </li>
             );
         }
-/*
+
         if (this.canEdit) {
             dropdownContents.push(
                 <li
