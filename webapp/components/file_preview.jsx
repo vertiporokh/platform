@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import FileStore from 'stores/file_store.jsx';
@@ -33,7 +33,7 @@ export default class FilePreview extends React.Component {
 
             let className = 'file-preview';
             let previewImage;
-            if (type === 'image') {
+            if (type === 'image' || type === 'svg') {
                 previewImage = (
                     <img
                         className='file-preview__image'

@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package model
@@ -226,6 +226,14 @@ func (c *Client4) GetCommandsRoute() string {
 	return fmt.Sprintf("/commands")
 }
 
+func (c *Client4) GetCommandRoute(commandId string) string {
+	return fmt.Sprintf(c.GetCommandsRoute()+"/%v", commandId)
+}
+
+func (c *Client4) GetEmojisRoute() string {
+	return fmt.Sprintf("/emoji")
+}
+
 func (c *Client4) DoApiGet(url string, etag string) (*http.Response, *AppError) {
 	return c.DoApiRequest(http.MethodGet, url, "", etag)
 }
@@ -282,6 +290,25 @@ func (c *Client4) DoUploadFile(url string, data []byte, contentType string) (*Fi
 	} else {
 		defer closeBody(rp)
 		return FileUploadResponseFromJson(rp.Body), BuildResponse(rp)
+	}
+}
+
+func (c *Client4) DoEmojiUploadFile(url string, data []byte, contentType string) (*Emoji, *Response) {
+	rq, _ := http.NewRequest("POST", c.ApiUrl+url, bytes.NewReader(data))
+	rq.Header.Set("Content-Type", contentType)
+	rq.Close = true
+
+	if len(c.AuthToken) > 0 {
+		rq.Header.Set(HEADER_AUTH, c.AuthType+" "+c.AuthToken)
+	}
+
+	if rp, err := c.HttpClient.Do(rq); err != nil {
+		return nil, &Response{Error: NewAppError(url, "model.client.connecting.app_error", nil, err.Error(), 0)}
+	} else if rp.StatusCode >= 300 {
+		return nil, &Response{StatusCode: rp.StatusCode, Error: AppErrorFromJson(rp.Body)}
+	} else {
+		defer closeBody(rp)
+		return EmojiFromJson(rp.Body), BuildResponse(rp)
 	}
 }
 
@@ -379,6 +406,16 @@ func (c *Client4) Logout() (bool, *Response) {
 
 		defer closeBody(r)
 		return CheckStatusOK(r), BuildResponse(r)
+	}
+}
+
+// SwitchAccountType changes a user's login type from one type to another.
+func (c *Client4) SwitchAccountType(switchRequest *SwitchRequest) (string, *Response) {
+	if r, err := c.DoApiPost(c.GetUsersRoute()+"/login/switch", switchRequest.ToJson()); err != nil {
+		return "", &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return MapFromJson(r.Body)["follow_link"], BuildResponse(r)
 	}
 }
 
@@ -1415,6 +1452,47 @@ func (c *Client4) GetPostsForChannel(channelId string, page, perPage int, etag s
 	}
 }
 
+// GetFlaggedPostsForUser returns flagged posts of a user based on user id string.
+func (c *Client4) GetFlaggedPostsForUser(userId string, page int, perPage int) (*PostList, *Response) {
+	query := fmt.Sprintf("?page=%v&per_page=%v", page, perPage)
+	if r, err := c.DoApiGet(c.GetUserRoute(userId)+"/posts/flagged"+query, ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return PostListFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// GetFlaggedPostsForUserInTeam returns flagged posts in team of a user based on user id string.
+func (c *Client4) GetFlaggedPostsForUserInTeam(userId string, teamId string, page int, perPage int) (*PostList, *Response) {
+	if len(teamId) == 0 || len(teamId) != 26 {
+		return nil, &Response{StatusCode: http.StatusBadRequest, Error: NewAppError("GetFlaggedPostsForUserInTeam", "model.client.get_flagged_posts_in_team.missing_parameter.app_error", nil, "", http.StatusBadRequest)}
+	}
+
+	query := fmt.Sprintf("?in_team=%v&page=%v&per_page=%v", teamId, page, perPage)
+	if r, err := c.DoApiGet(c.GetUserRoute(userId)+"/posts/flagged"+query, ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return PostListFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// GetFlaggedPostsForUserInChannel returns flagged posts in channel of a user based on user id string.
+func (c *Client4) GetFlaggedPostsForUserInChannel(userId string, channelId string, page int, perPage int) (*PostList, *Response) {
+	if len(channelId) == 0 || len(channelId) != 26 {
+		return nil, &Response{StatusCode: http.StatusBadRequest, Error: NewAppError("GetFlaggedPostsForUserInChannel", "model.client.get_flagged_posts_in_channel.missing_parameter.app_error", nil, "", http.StatusBadRequest)}
+	}
+
+	query := fmt.Sprintf("?in_channel=%v&page=%v&per_page=%v", channelId, page, perPage)
+	if r, err := c.DoApiGet(c.GetUserRoute(userId)+"/posts/flagged"+query, ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return PostListFromJson(r.Body), BuildResponse(r)
+	}
+}
+
 // GetPostsSince gets posts created after a specified time as Unix time in milliseconds.
 func (c *Client4) GetPostsSince(channelId string, time int64) (*PostList, *Response) {
 	query := fmt.Sprintf("?since=%v", time)
@@ -2124,6 +2202,26 @@ func (c *Client4) CreateCommand(cmd *Command) (*Command, *Response) {
 	}
 }
 
+// UpdateCommand updates a command based on the provided Command struct
+func (c *Client4) UpdateCommand(cmd *Command) (*Command, *Response) {
+	if r, err := c.DoApiPut(c.GetCommandRoute(cmd.Id), cmd.ToJson()); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return CommandFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// DeleteCommand deletes a command based on the provided command id string
+func (c *Client4) DeleteCommand(commandId string) (bool, *Response) {
+	if r, err := c.DoApiDelete(c.GetCommandRoute(commandId)); err != nil {
+		return false, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return CheckStatusOK(r), BuildResponse(r)
+	}
+}
+
 // ListCommands will retrieve a list of commands available in the team.
 func (c *Client4) ListCommands(teamId string, customOnly bool) ([]*Command, *Response) {
 	query := fmt.Sprintf("?team_id=%v&custom_only=%v", teamId, customOnly)
@@ -2175,5 +2273,53 @@ func (c *Client4) UpdateUserStatus(userId string, userStatus *Status) (*Status, 
 		defer closeBody(r)
 		return StatusFromJson(r.Body), BuildResponse(r)
 
+	}
+}
+
+// Emoji Section
+
+// CreateEmoji will save an emoji to the server if the current user has permission
+// to do so. If successful, the provided emoji will be returned with its Id field
+// filled in. Otherwise, an error will be returned.
+func (c *Client4) CreateEmoji(emoji *Emoji, image []byte, filename string) (*Emoji, *Response) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	if part, err := writer.CreateFormFile("image", filename); err != nil {
+		return nil, &Response{StatusCode: http.StatusForbidden, Error: NewLocAppError("CreateEmoji", "model.client.create_emoji.image.app_error", nil, err.Error())}
+	} else if _, err = io.Copy(part, bytes.NewBuffer(image)); err != nil {
+		return nil, &Response{StatusCode: http.StatusForbidden, Error: NewLocAppError("CreateEmoji", "model.client.create_emoji.image.app_error", nil, err.Error())}
+	}
+
+	if err := writer.WriteField("emoji", emoji.ToJson()); err != nil {
+		return nil, &Response{StatusCode: http.StatusForbidden, Error: NewLocAppError("CreateEmoji", "model.client.create_emoji.emoji.app_error", nil, err.Error())}
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, &Response{StatusCode: http.StatusForbidden, Error: NewLocAppError("CreateEmoji", "model.client.create_emoji.writer.app_error", nil, err.Error())}
+	}
+
+	return c.DoEmojiUploadFile(c.GetEmojisRoute(), body.Bytes(), writer.FormDataContentType())
+}
+
+// GetEmojiList returns a list of custom emoji in the system.
+func (c *Client4) GetEmojiList() ([]*Emoji, *Response) {
+	if r, err := c.DoApiGet(c.GetEmojisRoute(), ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return EmojiListFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// Reaction Section
+
+// GetReactions returns a list of reactions to a post.
+func (c *Client4) GetReactions(postId string) ([]*Reaction, *Response) {
+	if r, err := c.DoApiGet(c.GetPostRoute(postId)+"/reactions", ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return ReactionsFromJson(r.Body), BuildResponse(r)
 	}
 }

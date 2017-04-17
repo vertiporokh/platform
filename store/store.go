@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package store
@@ -150,6 +150,7 @@ type PostStore interface {
 	GetPosts(channelId string, offset int, limit int, allowFromCache bool) StoreChannel
 	GetFlaggedPosts(userId string, offset int, limit int) StoreChannel
 	GetFlaggedPostsForTeam(userId, teamId string, offset int, limit int) StoreChannel
+	GetFlaggedPostsForChannel(userId, channelId string, offset int, limit int) StoreChannel
 	GetPostsBefore(channelId string, postId string, numPosts int, offset int) StoreChannel
 	GetPostsAfter(channelId string, postId string, numPosts int, offset int) StoreChannel
 	GetPostsSince(channelId string, time int64, allowFromCache bool) StoreChannel
@@ -245,9 +246,9 @@ type OAuthStore interface {
 	SaveApp(app *model.OAuthApp) StoreChannel
 	UpdateApp(app *model.OAuthApp) StoreChannel
 	GetApp(id string) StoreChannel
-	GetAppByUser(userId string) StoreChannel
-	GetApps() StoreChannel
-	GetAuthorizedApps(userId string) StoreChannel
+	GetAppByUser(userId string, offset, limit int) StoreChannel
+	GetApps(offset, limit int) StoreChannel
+	GetAuthorizedApps(userId string, offset, limit int) StoreChannel
 	DeleteApp(id string) StoreChannel
 	SaveAuthData(authData *model.AuthData) StoreChannel
 	GetAuthData(code string) StoreChannel

@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package app
@@ -73,6 +73,14 @@ func (me *TestHelper) InitBasic() *TestHelper {
 	me.BasicPost = me.CreatePost(me.BasicChannel)
 
 	return me
+}
+
+func (me *TestHelper) MakeUsername() string {
+	return "un_" + model.NewId()
+}
+
+func (me *TestHelper) MakeEmail() string {
+	return "success_" + model.NewId() + "@simulator.amazonses.com"
 }
 
 func (me *TestHelper) CreateTeam() *model.Team {

@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package store
@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	VERSION_3_9_0 = "3.9.0"
 	VERSION_3_8_0 = "3.8.0"
 	VERSION_3_7_0 = "3.7.0"
 	VERSION_3_6_0 = "3.6.0"
@@ -43,6 +44,7 @@ func UpgradeDatabase(sqlStore *SqlStore) {
 	UpgradeDatabaseToVersion36(sqlStore)
 	UpgradeDatabaseToVersion37(sqlStore)
 	UpgradeDatabaseToVersion38(sqlStore)
+	UpgradeDatabaseToVersion39(sqlStore)
 
 	// If the SchemaVersion is empty this this is the first time it has ran
 	// so lets set it to the current version.
@@ -250,4 +252,13 @@ func UpgradeDatabaseToVersion38(sqlStore *SqlStore) {
 
 		saveSchemaVersion(sqlStore, VERSION_3_8_0)
 	}
+}
+
+func UpgradeDatabaseToVersion39(sqlStore *SqlStore) {
+	// TODO: Uncomment following condition when version 3.9.0 is released
+	//if shouldPerformUpgrade(sqlStore, VERSION_3_8_0, VERSION_3_9_0) {
+	sqlStore.CreateColumnIfNotExists("OAuthAccessData", "Scope", "varchar(128)", "varchar(128)", model.DEFAULT_SCOPE)
+
+	//	saveSchemaVersion(sqlStore, VERSION_3_9_0)
+	//}
 }

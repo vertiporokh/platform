@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 package main
 
@@ -40,7 +40,7 @@ var userCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a user",
 	Long:  "Create a user",
-	Example: `  user create --email user@example.com --username userexample --password Password1 
+	Example: `  user create --email user@example.com --username userexample --password Password1
   user create --firstname Joe --system_admin --email joe@example.com --username joe --password Password1`,
 	RunE: userCreateCmdF,
 }
@@ -67,7 +67,7 @@ var resetUserPasswordCmd = &cobra.Command{
 var resetUserMfaCmd = &cobra.Command{
 	Use:   "resetmfa [users]",
 	Short: "Turn off MFA",
-	Long: `Turn off multi-factor authentication for a user. 
+	Long: `Turn off multi-factor authentication for a user.
 If MFA enforcement is enabled, the user will be forced to re-enable MFA as soon as they login.`,
 	Example: "  user resetmfa user@example.com",
 	RunE:    resetUserMfaCmdF,
@@ -94,13 +94,13 @@ var migrateAuthCmd = &cobra.Command{
 	Short: "Mass migrate user accounts authentication type",
 	Long: `Migrates accounts from one authentication provider to another. For example, you can upgrade your authentication provider from email to ldap.
 
-from_auth: 
+from_auth:
 	The authentication service to migrate users accounts from.
-	Supported options: email, gitlab, saml. 
+	Supported options: email, gitlab, saml.
 
 to_auth:
 	The authentication service to migrate users to.
-	Supported options: ldap. 
+	Supported options: ldap.
 
 match_field:
 	The field that is guaranteed to be the same in both authentication services. For example, if the users emails are consistent set to email.
@@ -117,6 +117,14 @@ var verifyUserCmd = &cobra.Command{
 	Long:    "Verify the emails of some users.",
 	Example: "  user verify user1",
 	RunE:    verifyUserCmdF,
+}
+
+var searchUserCmd = &cobra.Command{
+	Use:     "search [users]",
+	Short:   "Search for users",
+	Long:    "Search for users based on username, email, or user ID.",
+	Example: "  user search user1@mail.com user2@mail.com",
+	RunE:    searchUserCmdF,
 }
 
 func init() {
@@ -144,6 +152,7 @@ func init() {
 		deleteAllUsersCmd,
 		migrateAuthCmd,
 		verifyUserCmd,
+		searchUserCmd,
 	)
 }
 
@@ -161,22 +170,26 @@ func userActivateCmdF(cmd *cobra.Command, args []string) error {
 func changeUsersActiveStatus(userArgs []string, active bool) {
 	users := getUsersFromUserArgs(userArgs)
 	for i, user := range users {
-		changeUserActiveStatus(user, userArgs[i], active)
+		err := changeUserActiveStatus(user, userArgs[i], active)
+
+		if err != nil {
+			CommandPrintErrorln(err.Error())
+		}
 	}
 }
 
-func changeUserActiveStatus(user *model.User, userArg string, activate bool) {
+func changeUserActiveStatus(user *model.User, userArg string, activate bool) error {
 	if user == nil {
-		CommandPrintErrorln("Can't find user '" + userArg + "'")
-		return
+		return fmt.Errorf("Can't find user '%v'", userArg)
 	}
 	if user.IsLDAPUser() {
-		CommandPrintErrorln(utils.T("api.user.update_active.no_deactivate_ldap.app_error"))
-		return
+		return errors.New(utils.T("api.user.update_active.no_deactivate_ldap.app_error"))
 	}
 	if _, err := app.UpdateActive(user, activate); err != nil {
-		CommandPrintErrorln("Unable to change activation status of user: " + userArg)
+		return fmt.Errorf("Unable to change activation status of user: %v", userArg)
 	}
+
+	return nil
 }
 
 func userDeactivateCmdF(cmd *cobra.Command, args []string) error {
@@ -249,20 +262,26 @@ func userInviteCmdF(cmd *cobra.Command, args []string) error {
 
 	teams := getTeamsFromTeamArgs(args[1:])
 	for i, team := range teams {
-		inviteUser(email, team, args[i+1])
+		err := inviteUser(email, team, args[i+1])
+
+		if err != nil {
+			CommandPrintErrorln(err.Error())
+		}
 	}
 
 	return nil
 }
 
-func inviteUser(email string, team *model.Team, teamArg string) {
+func inviteUser(email string, team *model.Team, teamArg string) error {
 	invites := []string{email}
 	if team == nil {
-		CommandPrintErrorln("Can't find team '" + teamArg + "'")
-		return
+		return fmt.Errorf("Can't find team '%v'", teamArg)
 	}
+
 	app.SendInviteEmails(team, "Administrator", invites, *utils.Cfg.ServiceSettings.SiteURL)
 	CommandPrettyPrintln("Invites may or may not have been sent.")
+
+	return nil
 }
 
 func resetUserPasswordCmdF(cmd *cobra.Command, args []string) error {
@@ -427,6 +446,36 @@ func verifyUserCmdF(cmd *cobra.Command, args []string) error {
 		if cresult := <-app.Srv.Store.User().VerifyEmail(user.Id); cresult.Err != nil {
 			CommandPrintErrorln("Unable to verify '" + args[i] + "' email. Error: " + cresult.Err.Error())
 		}
+	}
+
+	return nil
+}
+
+func searchUserCmdF(cmd *cobra.Command, args []string) error {
+	initDBCommandContextCobra(cmd)
+	if len(args) < 1 {
+		return errors.New("Enter at least one query.")
+	}
+
+	users := getUsersFromUserArgs(args)
+
+	for i, user := range users {
+		if i > 0 {
+			CommandPrettyPrintln("------------------------------")
+		}
+		if user == nil {
+			CommandPrintErrorln("Unable to find user '" + args[i] + "'")
+			continue
+		}
+
+		CommandPrettyPrintln("id: " + user.Id)
+		CommandPrettyPrintln("username: " + user.Username)
+		CommandPrettyPrintln("nickname: " + user.Nickname)
+		CommandPrettyPrintln("position: " + user.Position)
+		CommandPrettyPrintln("first_name: " + user.FirstName)
+		CommandPrettyPrintln("last_name: " + user.LastName)
+		CommandPrettyPrintln("email: " + user.Email)
+		CommandPrettyPrintln("auth_service: " + user.AuthService)
 	}
 
 	return nil

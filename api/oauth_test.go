@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api
@@ -491,7 +491,7 @@ func TestOAuthAuthorize(t *testing.T) {
 	}
 
 	authToken := Client.AuthType + " " + Client.AuthToken
-	if r, err := HttpGet(Client.Url+"/oauth/authorize?client_id="+oauthApp.Id+"&&redirect_uri=http://example.com&response_type="+model.AUTHCODE_RESPONSE_TYPE, Client.HttpClient, authToken, true); err != nil {
+	if r, err := HttpGet(Client.Url+"/oauth/authorize?client_id="+oauthApp.Id+"&redirect_uri=http://example.com&response_type="+model.AUTHCODE_RESPONSE_TYPE, Client.HttpClient, authToken, true); err != nil {
 		t.Fatal(err)
 		closeBody(r)
 	}

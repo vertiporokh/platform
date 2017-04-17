@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import BrowserStore from 'stores/browser_store.jsx';
@@ -1606,7 +1606,8 @@ export function pinPost(channelId, reaction) {
             // the "post_edited" websocket event take cares of updating the posts
             // the action below is mostly dispatched for the RHS to update
             AppDispatcher.handleServerAction({
-                type: ActionTypes.RECEIVED_POST_PINNED
+                type: ActionTypes.RECEIVED_POST_PINNED,
+                reaction
             });
         },
         (err) => {
@@ -1623,7 +1624,8 @@ export function unpinPost(channelId, reaction) {
             // the "post_edited" websocket event take cares of updating the posts
             // the action below is mostly dispatched for the RHS to update
             AppDispatcher.handleServerAction({
-                type: ActionTypes.RECEIVED_POST_UNPINNED
+                type: ActionTypes.RECEIVED_POST_UNPINNED,
+                reaction
             });
         },
         (err) => {

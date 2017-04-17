@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package api4
@@ -560,6 +560,21 @@ func CheckInternalErrorStatus(t *testing.T, resp *model.Response) {
 		debug.PrintStack()
 		t.Log("actual: " + strconv.Itoa(resp.StatusCode))
 		t.Log("expected: " + strconv.Itoa(http.StatusInternalServerError))
+		t.Fatal("wrong status code")
+	}
+}
+
+func CheckPayLoadTooLargeStatus(t *testing.T, resp *model.Response) {
+	if resp.Error == nil {
+		debug.PrintStack()
+		t.Fatal("should have errored with status:" + strconv.Itoa(http.StatusRequestEntityTooLarge))
+		return
+	}
+
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		debug.PrintStack()
+		t.Log("actual: " + strconv.Itoa(resp.StatusCode))
+		t.Log("expected: " + strconv.Itoa(http.StatusRequestEntityTooLarge))
 		t.Fatal("wrong status code")
 	}
 }

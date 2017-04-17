@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import AudioVideoPreview from './audio_video_preview.jsx';
@@ -180,7 +180,7 @@ export default class ViewImageModal extends React.Component {
         if (this.state.loaded[this.state.imgId]) {
             const fileType = Utils.getFileType(fileInfo.extension);
 
-            if (fileType === 'image') {
+            if (fileType === 'image' || fileType === 'svg') {
                 content = (
                     <ImagePreview
                         fileInfo={fileInfo}

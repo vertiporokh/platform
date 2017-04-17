@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import AppDispatcher from 'dispatcher/app_dispatcher.jsx';
@@ -525,7 +525,7 @@ export function clientLogout(redirectTo = '/') {
 
 export function emitSearchMentionsEvent(user) {
     let terms = '';
-    if (user.notify_props && user.notify_props.mention_keys) {
+    if (user.notify_props) {
         const termKeys = UserStore.getMentionKeys(user.id);
 
         if (termKeys.indexOf('@channel') !== -1) {

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import $ from 'jquery';
@@ -426,6 +426,10 @@ export function getFileType(extin) {
         return 'patch';
     }
 
+    if (Constants.SVG_TYPES.indexOf(ext) > -1) {
+        return 'svg';
+    }
+
     return 'other';
 }
 
@@ -449,7 +453,7 @@ export function getIconClassName(fileTypeIn) {
         return Constants.ICON_NAME_FROM_TYPE[fileType];
     }
 
-    return 'glyphicon-file';
+    return 'generic';
 }
 
 export function splitFileLocation(fileLocation) {

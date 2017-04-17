@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 package app
@@ -402,6 +402,14 @@ func GetFlaggedPostsForTeam(userId, teamId string, offset int, limit int) (*mode
 	}
 }
 
+func GetFlaggedPostsForChannel(userId, channelId string, offset int, limit int) (*model.PostList, *model.AppError) {
+	if result := <-Srv.Store.Post().GetFlaggedPostsForChannel(userId, channelId, offset, limit); result.Err != nil {
+		return nil, result.Err
+	} else {
+		return result.Data.(*model.PostList), nil
+	}
+}
+
 func GetPermalinkPost(postId string, userId string) (*model.PostList, *model.AppError) {
 	if result := <-Srv.Store.Post().Get(postId); result.Err != nil {
 		return nil, result.Err
@@ -559,13 +567,13 @@ func GetOpenGraphMetadata(url string) *opengraph.OpenGraph {
 
 	res, err := httpClient.Get(url)
 	if err != nil {
-		l4g.Error(err.Error())
+		l4g.Error("GetOpenGraphMetadata request failed for url=%v with err=%v", url, err.Error())
 		return og
 	}
 	defer CloseBody(res)
 
 	if err := og.ProcessHTML(res.Body); err != nil {
-		l4g.Error(err.Error())
+		l4g.Error("GetOpenGraphMetadata processing failed for url=%v with err=%v", url, err.Error())
 	}
 
 	return og

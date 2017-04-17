@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import $ from 'jquery';
@@ -14,6 +14,8 @@ import {FormattedMessage} from 'react-intl';
 import {Link} from 'react-router/es6';
 
 import React from 'react';
+
+import * as Utils from 'utils/utils.jsx';
 
 export default class AdminNavbarDropdown extends React.Component {
     constructor(props) {
@@ -71,6 +73,7 @@ export default class AdminNavbarDropdown extends React.Component {
                 teams.push(
                     <li key={'team_' + team.name}>
                         <Link
+                            id={'swithTo' + Utils.createSafeId(team.name)}
                             to={'/' + team.name + '/channels/town-square'}
                         >
                             <FormattedMessage
@@ -113,6 +116,7 @@ export default class AdminNavbarDropdown extends React.Component {
                 >
                     <a
                         href='#'
+                        id='adminNavbarDropdownButton'
                         className='dropdown-toggle admin-navbar-dropdown__toggle'
                         data-toggle='dropdown'
                         role='button'
@@ -136,6 +140,7 @@ export default class AdminNavbarDropdown extends React.Component {
                         <li>
                             <a
                                 href='#'
+                                id='logout'
                                 onClick={() => GlobalActions.emitUserLoggedOutEvent()}
                             >
                                 <FormattedMessage
