@@ -6,10 +6,12 @@ package api
 import (
 	"time"
 
+	"github.com/mattermost/platform/api4"
 	"github.com/mattermost/platform/app"
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/store"
 	"github.com/mattermost/platform/utils"
+	"github.com/mattermost/platform/wsapi"
 
 	l4g "github.com/alecthomas/log4go"
 )
@@ -21,6 +23,7 @@ type TestHelper struct {
 	BasicUser2   *model.User
 	BasicChannel *model.Channel
 	BasicPost    *model.Post
+	PinnedPost   *model.Post
 
 	SystemAdminClient  *model.Client
 	SystemAdminTeam    *model.Team
@@ -40,9 +43,12 @@ func SetupEnterprise() *TestHelper {
 		app.NewServer()
 		app.InitStores()
 		InitRouter()
+		wsapi.InitRouter()
 		app.StartServer()
 		utils.InitHTML()
+		api4.InitApi(false)
 		InitApi()
+		wsapi.InitApi()
 		utils.EnableDebugLogForTest()
 		app.Srv.Store.MarkSystemRanUnitTests()
 
@@ -59,12 +65,18 @@ func Setup() *TestHelper {
 		utils.InitTranslations(utils.Cfg.LocalizationSettings)
 		utils.Cfg.TeamSettings.MaxUsersPerTeam = 50
 		*utils.Cfg.RateLimitSettings.Enable = false
+		utils.Cfg.EmailSettings.SendEmailNotifications = true
+		utils.Cfg.EmailSettings.SMTPServer = "dockerhost"
+		utils.Cfg.EmailSettings.SMTPPort = "2500"
+		utils.Cfg.EmailSettings.FeedbackEmail = "test@example.com"
 		utils.DisableDebugLogForTest()
 		app.NewServer()
 		app.InitStores()
 		InitRouter()
+		wsapi.InitRouter()
 		app.StartServer()
 		InitApi()
+		wsapi.InitApi()
 		utils.EnableDebugLogForTest()
 		app.Srv.Store.MarkSystemRanUnitTests()
 
@@ -74,30 +86,46 @@ func Setup() *TestHelper {
 	return &TestHelper{}
 }
 
+func ReloadConfigForSetup() {
+	utils.LoadConfig("config.json")
+	utils.InitTranslations(utils.Cfg.LocalizationSettings)
+	utils.Cfg.TeamSettings.MaxUsersPerTeam = 50
+	*utils.Cfg.RateLimitSettings.Enable = false
+	utils.Cfg.EmailSettings.SendEmailNotifications = true
+	utils.Cfg.EmailSettings.SMTPServer = "dockerhost"
+	utils.Cfg.EmailSettings.SMTPPort = "2500"
+	utils.Cfg.EmailSettings.FeedbackEmail = "test@example.com"
+	*utils.Cfg.TeamSettings.EnableOpenServer = true
+}
+
 func (me *TestHelper) InitBasic() *TestHelper {
 	me.BasicClient = me.CreateClient()
-	me.BasicTeam = me.CreateTeam(me.BasicClient)
 	me.BasicUser = me.CreateUser(me.BasicClient)
+	me.LoginBasic()
+	me.BasicTeam = me.CreateTeam(me.BasicClient)
 	LinkUserToTeam(me.BasicUser, me.BasicTeam)
+	UpdateUserToNonTeamAdmin(me.BasicUser, me.BasicTeam)
 	me.BasicUser2 = me.CreateUser(me.BasicClient)
 	LinkUserToTeam(me.BasicUser2, me.BasicTeam)
 	me.BasicClient.SetTeamId(me.BasicTeam.Id)
-	me.LoginBasic()
 	me.BasicChannel = me.CreateChannel(me.BasicClient, me.BasicTeam)
 	me.BasicPost = me.CreatePost(me.BasicClient, me.BasicChannel)
+
+	pinnedPostChannel := me.CreateChannel(me.BasicClient, me.BasicTeam)
+	me.PinnedPost = me.CreatePinnedPost(me.BasicClient, pinnedPostChannel)
 
 	return me
 }
 
 func (me *TestHelper) InitSystemAdmin() *TestHelper {
 	me.SystemAdminClient = me.CreateClient()
-	me.SystemAdminTeam = me.CreateTeam(me.SystemAdminClient)
 	me.SystemAdminUser = me.CreateUser(me.SystemAdminClient)
-	LinkUserToTeam(me.SystemAdminUser, me.SystemAdminTeam)
-	me.SystemAdminClient.SetTeamId(me.SystemAdminTeam.Id)
-	UpdateUserRoles(me.SystemAdminUser, model.ROLE_SYSTEM_USER.Id+" "+model.ROLE_SYSTEM_ADMIN.Id)
 	me.SystemAdminUser.Password = "Password1"
 	me.LoginSystemAdmin()
+	me.SystemAdminTeam = me.CreateTeam(me.SystemAdminClient)
+	LinkUserToTeam(me.SystemAdminUser, me.SystemAdminTeam)
+	me.SystemAdminClient.SetTeamId(me.SystemAdminTeam.Id)
+	app.UpdateUserRoles(me.SystemAdminUser.Id, model.ROLE_SYSTEM_USER.Id+" "+model.ROLE_SYSTEM_ADMIN.Id)
 	me.SystemAdminChannel = me.CreateChannel(me.SystemAdminClient, me.SystemAdminTeam)
 
 	return me
@@ -147,7 +175,7 @@ func (me *TestHelper) CreateUser(client *model.Client) *model.User {
 func LinkUserToTeam(user *model.User, team *model.Team) {
 	utils.DisableDebugLogForTest()
 
-	err := app.JoinUserToTeam(team, user)
+	err := app.JoinUserToTeam(team, user, "")
 	if err != nil {
 		l4g.Error(err.Error())
 		l4g.Close()
@@ -172,13 +200,27 @@ func UpdateUserToTeamAdmin(user *model.User, team *model.Team) {
 	utils.EnableDebugLogForTest()
 }
 
+func UpdateUserToNonTeamAdmin(user *model.User, team *model.Team) {
+	utils.DisableDebugLogForTest()
+
+	tm := &model.TeamMember{TeamId: team.Id, UserId: user.Id, Roles: model.ROLE_TEAM_USER.Id}
+	if tmr := <-app.Srv.Store.Team().UpdateMember(tm); tmr.Err != nil {
+		utils.EnableDebugLogForTest()
+		l4g.Error(tmr.Err.Error())
+		l4g.Close()
+		time.Sleep(time.Second)
+		panic(tmr.Err)
+	}
+	utils.EnableDebugLogForTest()
+}
+
 func MakeUserChannelAdmin(user *model.User, channel *model.Channel) {
 	utils.DisableDebugLogForTest()
 
 	if cmr := <-app.Srv.Store.Channel().GetMember(channel.Id, user.Id); cmr.Err == nil {
-		cm := cmr.Data.(model.ChannelMember)
+		cm := cmr.Data.(*model.ChannelMember)
 		cm.Roles = "channel_admin channel_user"
-		if sr := <-app.Srv.Store.Channel().UpdateMember(&cm); sr.Err != nil {
+		if sr := <-app.Srv.Store.Channel().UpdateMember(cm); sr.Err != nil {
 			utils.EnableDebugLogForTest()
 			panic(sr.Err)
 		}
@@ -194,9 +236,9 @@ func MakeUserChannelUser(user *model.User, channel *model.Channel) {
 	utils.DisableDebugLogForTest()
 
 	if cmr := <-app.Srv.Store.Channel().GetMember(channel.Id, user.Id); cmr.Err == nil {
-		cm := cmr.Data.(model.ChannelMember)
+		cm := cmr.Data.(*model.ChannelMember)
 		cm.Roles = "channel_user"
-		if sr := <-app.Srv.Store.Channel().UpdateMember(&cm); sr.Err != nil {
+		if sr := <-app.Srv.Store.Channel().UpdateMember(cm); sr.Err != nil {
 			utils.EnableDebugLogForTest()
 			panic(sr.Err)
 		}
@@ -238,6 +280,21 @@ func (me *TestHelper) CreatePost(client *model.Client, channel *model.Channel) *
 	post := &model.Post{
 		ChannelId: channel.Id,
 		Message:   "message_" + id,
+	}
+
+	utils.DisableDebugLogForTest()
+	r := client.Must(client.CreatePost(post)).Data.(*model.Post)
+	utils.EnableDebugLogForTest()
+	return r
+}
+
+func (me *TestHelper) CreatePinnedPost(client *model.Client, channel *model.Channel) *model.Post {
+	id := model.NewId()
+
+	post := &model.Post{
+		ChannelId: channel.Id,
+		Message:   "message_" + id,
+		IsPinned:  true,
 	}
 
 	utils.DisableDebugLogForTest()

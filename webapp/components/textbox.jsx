@@ -32,7 +32,8 @@ export default class Textbox extends React.Component {
         onBlur: React.PropTypes.func,
         supportsCommands: React.PropTypes.bool.isRequired,
         handlePostError: React.PropTypes.func,
-        suggestionListStyle: React.PropTypes.string
+        suggestionListStyle: React.PropTypes.string,
+        emojiEnabled: React.PropTypes.bool
     };
 
     static defaultProps = {
@@ -44,7 +45,7 @@ export default class Textbox extends React.Component {
 
         this.focus = this.focus.bind(this);
         this.recalculateSize = this.recalculateSize.bind(this);
-        this.onRecievedError = this.onRecievedError.bind(this);
+        this.onReceivedError = this.onReceivedError.bind(this);
         this.handleKeyPress = this.handleKeyPress.bind(this);
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handleBlur = this.handleBlur.bind(this);
@@ -67,7 +68,7 @@ export default class Textbox extends React.Component {
     }
 
     componentDidMount() {
-        ErrorStore.addChangeListener(this.onRecievedError);
+        ErrorStore.addChangeListener(this.onReceivedError);
     }
 
     componentWillMount() {
@@ -75,10 +76,10 @@ export default class Textbox extends React.Component {
     }
 
     componentWillUnmount() {
-        ErrorStore.removeChangeListener(this.onRecievedError);
+        ErrorStore.removeChangeListener(this.onReceivedError);
     }
 
-    onRecievedError() {
+    onReceivedError() {
         const errorCount = ErrorStore.getConnectionErrorCount();
 
         if (errorCount > 1) {
@@ -154,6 +155,10 @@ export default class Textbox extends React.Component {
         e.preventDefault();
         e.target.blur();
         this.setState({preview: !this.state.preview});
+    }
+
+    hidePreview() {
+        this.setState({preview: false});
     }
 
     componentWillReceiveProps(nextProps) {
@@ -241,6 +246,14 @@ export default class Textbox extends React.Component {
             </div>
         );
 
+        let textboxClassName = 'form-control custom-textarea';
+        if (this.props.emojiEnabled) {
+            textboxClassName += ' custom-textarea--emoji-picker';
+        }
+        if (this.state.connection) {
+            textboxClassName += ' ' + this.state.connection;
+        }
+
         return (
             <div
                 ref='wrapper'
@@ -249,7 +262,7 @@ export default class Textbox extends React.Component {
                 <SuggestionBox
                     id={this.props.id}
                     ref='message'
-                    className={`form-control custom-textarea ${this.state.connection}`}
+                    className={textboxClassName}
                     type='textarea'
                     spellCheck='true'
                     placeholder={this.props.createMessage}

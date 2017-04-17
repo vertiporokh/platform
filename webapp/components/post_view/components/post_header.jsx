@@ -3,6 +3,7 @@
 
 import UserProfile from 'components/user_profile.jsx';
 import PostInfo from './post_info.jsx';
+import {FormattedMessage} from 'react-intl';
 
 import * as PostUtils from 'utils/post_utils.jsx';
 
@@ -55,7 +56,12 @@ export default class PostHeader extends React.Component {
             userProfile = (
                 <UserProfile
                     user={{}}
-                    overwriteName={Constants.SYSTEM_MESSAGE_PROFILE_NAME}
+                    overwriteName={
+                        <FormattedMessage
+                            id='post_info.system'
+                            defaultMessage='System'
+                        />
+                    }
                     overwriteImage={Constants.SYSTEM_MESSAGE_PROFILE_IMAGE}
                     disablePopover={true}
                 />
@@ -76,7 +82,6 @@ export default class PostHeader extends React.Component {
                         commentCount={this.props.commentCount}
                         handleCommentClick={this.props.handleCommentClick}
                         handleDropdownOpened={this.props.handleDropdownOpened}
-                        allowReply={!isSystemMessage}
                         isLastComment={this.props.isLastComment}
                         sameUser={this.props.sameUser}
                         currentUser={this.props.currentUser}

@@ -5,10 +5,11 @@ import ChannelStore from 'stores/channel_store.jsx';
 import TeamStore from 'stores/team_store.jsx';
 import UserStore from 'stores/user_store.jsx';
 
-import {removeUserFromChannel} from 'actions/channel_actions.jsx';
+import {removeUserFromChannel, makeUserChannelAdmin, makeUserChannelMember} from 'actions/channel_actions.jsx';
 
 import * as AsyncClient from 'utils/async_client.jsx';
 import * as Utils from 'utils/utils.jsx';
+import {canManageMembers} from 'utils/channel_utils.jsx';
 
 import React from 'react';
 import {FormattedMessage} from 'react-intl';
@@ -18,6 +19,8 @@ export default class ChannelMembersDropdown extends React.Component {
         super(props);
 
         this.handleRemoveFromChannel = this.handleRemoveFromChannel.bind(this);
+        this.handleMakeChannelMember = this.handleMakeChannelMember.bind(this);
+        this.handleMakeChannelAdmin = this.handleMakeChannelAdmin.bind(this);
 
         this.state = {
             serverError: null,
@@ -28,6 +31,32 @@ export default class ChannelMembersDropdown extends React.Component {
 
     handleRemoveFromChannel() {
         removeUserFromChannel(
+            this.props.channel.id,
+            this.props.user.id,
+            () => {
+                AsyncClient.getChannelStats(this.props.channel.id);
+            },
+            (err) => {
+                this.setState({serverError: err.message});
+            }
+        );
+    }
+
+    handleMakeChannelMember() {
+        makeUserChannelMember(
+            this.props.channel.id,
+            this.props.user.id,
+            () => {
+                AsyncClient.getChannelStats(this.props.channel.id);
+            },
+            (err) => {
+                this.setState({serverError: err.message});
+            }
+        );
+    }
+
+    handleMakeChannelAdmin() {
+        makeUserChannelAdmin(
             this.props.channel.id,
             this.props.user.id,
             () => {
@@ -63,8 +92,7 @@ export default class ChannelMembersDropdown extends React.Component {
 
     // Checks if the current user has the power to remove this member from the channel.
     canRemoveMember() {
-        // TODO: This will be implemented as part of PLT-5047.
-        return true;
+        return canManageMembers(this.props.channel, UserStore.isSystemAdminForCurrentUser(), TeamStore.isTeamAdminForCurrentTeam(), ChannelStore.isChannelAdminForCurrentChannel());
     }
 
     render() {
@@ -103,6 +131,7 @@ export default class ChannelMembersDropdown extends React.Component {
                 removeFromChannel = (
                     <li role='presentation'>
                         <a
+                            id='removeFromChannel'
                             role='menuitem'
                             href='#'
                             onClick={this.handleRemoveFromChannel}
@@ -116,9 +145,48 @@ export default class ChannelMembersDropdown extends React.Component {
                 );
             }
 
+            let makeChannelMember = null;
+            if (this.isChannelAdmin()) {
+                makeChannelMember = (
+                    <li role='presentation'>
+                        <a
+                            id='makeChannelMember'
+                            role='menuitem'
+                            href='#'
+                            onClick={this.handleMakeChannelMember}
+                        >
+                            <FormattedMessage
+                                id='channel_members_dropdown.make_channel_member'
+                                defaultMessage='Make Channel Member'
+                            />
+                        </a>
+                    </li>
+                );
+            }
+
+            let makeChannelAdmin = null;
+            if (!this.isChannelAdmin()) {
+                makeChannelAdmin = (
+                    <li role='presentation'>
+                        <a
+                            id='makeChannelAdmin'
+                            role='menuitem'
+                            href='#'
+                            onClick={this.handleMakeChannelAdmin}
+                        >
+                            <FormattedMessage
+                                id='channel_members_dropdown.make_channel_admin'
+                                defaultMessage='Make Channel Admin'
+                            />
+                        </a>
+                    </li>
+                );
+            }
+
             return (
                 <div className='dropdown member-drop'>
                     <a
+                        id='channelMemberDropdown'
                         href='#'
                         className='dropdown-toggle theme'
                         type='button'
@@ -132,6 +200,8 @@ export default class ChannelMembersDropdown extends React.Component {
                         className='dropdown-menu member-menu'
                         role='menu'
                     >
+                        {makeChannelMember}
+                        {makeChannelAdmin}
                         {removeFromChannel}
                     </ul>
                     {serverError}
@@ -140,6 +210,7 @@ export default class ChannelMembersDropdown extends React.Component {
         } else if (this.canRemoveMember()) {
             return (
                 <button
+                    id='removeMember'
                     type='button'
                     className='btn btn-danger btn-message'
                     onClick={this.handleRemoveFromChannel}

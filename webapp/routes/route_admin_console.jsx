@@ -35,12 +35,13 @@ import StorageSettings from 'components/admin_console/storage_settings.jsx';
 import ImageSettings from 'components/admin_console/image_settings.jsx';
 import CustomBrandSettings from 'components/admin_console/custom_brand_settings.jsx';
 import CustomEmojiSettings from 'components/admin_console/custom_emoji_settings.jsx';
+import LinkPreviewsSettings from 'components/admin_console/link_previews_settings.jsx';
 import LegalAndSupportSettings from 'components/admin_console/legal_and_support_settings.jsx';
 import NativeAppLinkSettings from 'components/admin_console/native_app_link_settings.jsx';
 import ComplianceSettings from 'components/admin_console/compliance_settings.jsx';
 import RateSettings from 'components/admin_console/rate_settings.jsx';
 import DeveloperSettings from 'components/admin_console/developer_settings.jsx';
-import TeamUsers from 'components/admin_console/team_users.jsx';
+import SystemUsers from 'components/admin_console/system_users/system_users.jsx';
 import TeamAnalytics from 'components/analytics/team_analytics.jsx';
 import LicenseSettings from 'components/admin_console/license_settings.jsx';
 import Audits from 'components/admin_console/audits.jsx';
@@ -84,9 +85,9 @@ export default (
             />
         </Route>
         <Route path='authentication'>
-            <IndexRedirect to='email'/>
+            <IndexRedirect to='authentication_email'/>
             <Route
-                path='email'
+                path='authentication_email'
                 component={EmailAuthenticationSettings}
             />
             <Route
@@ -134,9 +135,9 @@ export default (
             />
         </Route>
         <Route path='notifications'>
-            <IndexRedirect to='email'/>
+            <IndexRedirect to='notifications_email'/>
             <Route
-                path='email'
+                path='notifications_email'
                 component={EmailSettings}
             />
             <Route
@@ -181,6 +182,10 @@ export default (
                 component={CustomEmojiSettings}
             />
             <Route
+                path='link_previews'
+                component={LinkPreviewsSettings}
+            />
+            <Route
                 path='legal_and_support'
                 component={LegalAndSupportSettings}
             />
@@ -212,18 +217,26 @@ export default (
                 component={MetricsSettings}
             />
         </Route>
+        <Route
+            path='users'
+            component={SystemUsers}
+        />
+        <Route
+            path='team_analytics'
+            component={TeamAnalytics}
+        />
         <Route path='team'>
             <Redirect
                 from=':team'
-                to=':team/users'
+                to='../users'
             />
-            <Route
-                path=':team/users'
-                component={TeamUsers}
+            <Redirect
+                from=':team/users'
+                to='../users'
             />
-            <Route
-                path=':team/analytics'
-                component={TeamAnalytics}
+            <Redirect
+                from=':team/analytics'
+                to='../team_analytics'
             />
             <Redirect
                 from='*'

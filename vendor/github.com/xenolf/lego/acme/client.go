@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,6 +21,16 @@ import (
 var (
 	// Logger is an optional custom logger.
 	Logger *log.Logger
+)
+
+const (
+	// maxBodySize is the maximum size of body that we will read.
+	maxBodySize = 1024 * 1024
+
+	// overallRequestLimit is the overall number of request per second limited on the
+	// “new-reg”, “new-authz” and “new-cert” endpoints. From the documentation the
+	// limitation is 20 requests per second, but using 20 as value doesn't work but 18 do
+	overallRequestLimit = 18
 )
 
 // logf writes a log entry. It uses Logger if not
@@ -49,12 +60,11 @@ type validateFunc func(j *jws, domain, uri string, chlng challenge) error
 
 // Client is the user-friendy way to ACME
 type Client struct {
-	directory  directory
-	user       User
-	jws        *jws
-	keyType    KeyType
-	issuerCert []byte
-	solvers    map[Challenge]solver
+	directory directory
+	user      User
+	jws       *jws
+	keyType   KeyType
+	solvers   map[Challenge]solver
 }
 
 // NewClient creates a new ACME client on behalf of the user. The client will depend on
@@ -519,7 +529,14 @@ func (c *Client) chooseSolvers(auth authorization, domain string) map[int]solver
 func (c *Client) getChallenges(domains []string) ([]authorizationResource, map[string]error) {
 	resc, errc := make(chan authorizationResource), make(chan domainError)
 
+	var delay time.Duration
+	if len(domains) > overallRequestLimit {
+		delay = time.Second / overallRequestLimit
+	}
+
 	for _, domain := range domains {
+		time.Sleep(delay)
+
 		go func(domain string) {
 			authMsg := authorization{Resource: "new-authz", Identifier: identifier{Type: "dns", Value: domain}}
 			var authz authorization
@@ -532,6 +549,7 @@ func (c *Client) getChallenges(domains []string) ([]authorizationResource, map[s
 			links := parseLinks(hdr["Link"])
 			if links["next"] == "" {
 				logf("[ERROR][%s] acme: Server did not provide next link to proceed", domain)
+				errc <- domainError{Domain: domain, Error: errors.New("Server did not provide next link to proceed")}
 				return
 			}
 
@@ -557,10 +575,18 @@ func (c *Client) getChallenges(domains []string) ([]authorizationResource, map[s
 		}
 	}
 
+	logAuthz(challenges)
+
 	close(resc)
 	close(errc)
 
 	return challenges, failures
+}
+
+func logAuthz(authz []authorizationResource) {
+	for _, auth := range authz {
+		logf("[INFO][%s] AuthURL: %s", auth.Domain, auth.AuthURL)
+	}
 }
 
 func (c *Client) requestCertificate(authz []authorizationResource, bundle bool, privKey crypto.PrivateKey, mustStaple bool) (CertificateResource, error) {
@@ -611,89 +637,108 @@ func (c *Client) requestCertificateForCsr(authz []authorizationResource, bundle 
 		return CertificateResource{}, err
 	}
 
-	cerRes := CertificateResource{
+	certRes := CertificateResource{
 		Domain:     commonName.Domain,
 		CertURL:    resp.Header.Get("Location"),
-		PrivateKey: privateKeyPem}
+		PrivateKey: privateKeyPem,
+	}
 
-	for {
-		switch resp.StatusCode {
-		case 201, 202:
-			cert, err := ioutil.ReadAll(limitReader(resp.Body, 1024*1024))
-			resp.Body.Close()
-			if err != nil {
-				return CertificateResource{}, err
-			}
-
-			// The server returns a body with a length of zero if the
-			// certificate was not ready at the time this request completed.
-			// Otherwise the body is the certificate.
-			if len(cert) > 0 {
-
-				cerRes.CertStableURL = resp.Header.Get("Content-Location")
-				cerRes.AccountRef = c.user.GetRegistration().URI
-
-				issuedCert := pemEncode(derCertificateBytes(cert))
-				// If bundle is true, we want to return a certificate bundle.
-				// To do this, we need the issuer certificate.
-				if bundle {
-					// The issuer certificate link is always supplied via an "up" link
-					// in the response headers of a new certificate.
-					links := parseLinks(resp.Header["Link"])
-					issuerCert, err := c.getIssuerCertificate(links["up"])
-					if err != nil {
-						// If we fail to acquire the issuer cert, return the issued certificate - do not fail.
-						logf("[WARNING][%s] acme: Could not bundle issuer certificate: %v", commonName.Domain, err)
-					} else {
-						// Success - append the issuer cert to the issued cert.
-						issuerCert = pemEncode(derCertificateBytes(issuerCert))
-						issuedCert = append(issuedCert, issuerCert...)
-					}
-				}
-
-				cerRes.Certificate = issuedCert
-				logf("[INFO][%s] Server responded with a certificate.", commonName.Domain)
-				return cerRes, nil
-			}
-
-			// The certificate was granted but is not yet issued.
-			// Check retry-after and loop.
-			ra := resp.Header.Get("Retry-After")
-			retryAfter, err := strconv.Atoi(ra)
-			if err != nil {
-				return CertificateResource{}, err
-			}
-
-			logf("[INFO][%s] acme: Server responded with status 202; retrying after %ds", commonName.Domain, retryAfter)
-			time.Sleep(time.Duration(retryAfter) * time.Second)
-
-			break
-		default:
-			return CertificateResource{}, handleHTTPError(resp)
+	maxChecks := 1000
+	for i := 0; i < maxChecks; i++ {
+		done, err := c.checkCertResponse(resp, &certRes, bundle)
+		resp.Body.Close()
+		if err != nil {
+			return CertificateResource{}, err
 		}
-
-		resp, err = httpGet(cerRes.CertURL)
+		if done {
+			break
+		}
+		if i == maxChecks-1 {
+			return CertificateResource{}, fmt.Errorf("polled for certificate %d times; giving up", i)
+		}
+		resp, err = httpGet(certRes.CertURL)
 		if err != nil {
 			return CertificateResource{}, err
 		}
 	}
+
+	return certRes, nil
 }
 
-// getIssuerCertificate requests the issuer certificate and caches it for
-// subsequent requests.
+// checkCertResponse checks resp to see if a certificate is contained in the
+// response, and if so, loads it into certRes and returns true. If the cert
+// is not yet ready, it returns false. This function honors the waiting period
+// required by the Retry-After header of the response, if specified. This
+// function may read from resp.Body but does NOT close it. The certRes input
+// should already have the Domain (common name) field populated. If bundle is
+// true, the certificate will be bundled with the issuer's cert.
+func (c *Client) checkCertResponse(resp *http.Response, certRes *CertificateResource, bundle bool) (bool, error) {
+	switch resp.StatusCode {
+	case 201, 202:
+		cert, err := ioutil.ReadAll(limitReader(resp.Body, maxBodySize))
+		if err != nil {
+			return false, err
+		}
+
+		// The server returns a body with a length of zero if the
+		// certificate was not ready at the time this request completed.
+		// Otherwise the body is the certificate.
+		if len(cert) > 0 {
+			certRes.CertStableURL = resp.Header.Get("Content-Location")
+			certRes.AccountRef = c.user.GetRegistration().URI
+
+			issuedCert := pemEncode(derCertificateBytes(cert))
+
+			// The issuer certificate link is always supplied via an "up" link
+			// in the response headers of a new certificate.
+			links := parseLinks(resp.Header["Link"])
+			issuerCert, err := c.getIssuerCertificate(links["up"])
+			if err != nil {
+				// If we fail to acquire the issuer cert, return the issued certificate - do not fail.
+				logf("[WARNING][%s] acme: Could not bundle issuer certificate: %v", certRes.Domain, err)
+			} else {
+				issuerCert = pemEncode(derCertificateBytes(issuerCert))
+
+				// If bundle is true, we want to return a certificate bundle.
+				// To do this, we append the issuer cert to the issued cert.
+				if bundle {
+					issuedCert = append(issuedCert, issuerCert...)
+				}
+			}
+
+			certRes.Certificate = issuedCert
+			certRes.IssuerCertificate = issuerCert
+			logf("[INFO][%s] Server responded with a certificate.", certRes.Domain)
+			return true, nil
+		}
+
+		// The certificate was granted but is not yet issued.
+		// Check retry-after and loop.
+		ra := resp.Header.Get("Retry-After")
+		retryAfter, err := strconv.Atoi(ra)
+		if err != nil {
+			return false, err
+		}
+
+		logf("[INFO][%s] acme: Server responded with status 202; retrying after %ds", certRes.Domain, retryAfter)
+		time.Sleep(time.Duration(retryAfter) * time.Second)
+
+		return false, nil
+	default:
+		return false, handleHTTPError(resp)
+	}
+}
+
+// getIssuerCertificate requests the issuer certificate
 func (c *Client) getIssuerCertificate(url string) ([]byte, error) {
 	logf("[INFO] acme: Requesting issuer cert from %s", url)
-	if c.issuerCert != nil {
-		return c.issuerCert, nil
-	}
-
 	resp, err := httpGet(url)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	issuerBytes, err := ioutil.ReadAll(limitReader(resp.Body, 1024*1024))
+	issuerBytes, err := ioutil.ReadAll(limitReader(resp.Body, maxBodySize))
 	if err != nil {
 		return nil, err
 	}
@@ -703,7 +748,6 @@ func (c *Client) getIssuerCertificate(url string) ([]byte, error) {
 		return nil, err
 	}
 
-	c.issuerCert = issuerBytes
 	return issuerBytes, err
 }
 

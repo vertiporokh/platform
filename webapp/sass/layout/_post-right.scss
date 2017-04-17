@@ -53,15 +53,22 @@
         border: none;
     }
 
+    .date-separator {
+        hr {
+            border-top: 1px solid #eee;
+        }
+    }
+
     .post-create__container {
         width: 100%;
 
-        .textarea-wrapper {
-            min-height: 100px;
-        }
-
         .btn {
             margin-bottom: 10px;
+
+            &.disabled {
+                background: grey !important;
+                border-color: transparent !important;
+            }
         }
 
         .custom-textarea {
@@ -141,6 +148,7 @@
     -webkit-overflow-scrolling: touch;
     @include flex(1 1 auto);
     overflow: auto;
+    padding-top: 10px;
     position: relative;
 
     .file-preview__container {

@@ -21,17 +21,18 @@ import (
 )
 
 type Context struct {
-	Session      model.Session
-	RequestId    string
-	IpAddress    string
-	Path         string
-	Err          *model.AppError
-	teamURLValid bool
-	teamURL      string
-	siteURL      string
-	T            goi18n.TranslateFunc
-	Locale       string
-	TeamId       string
+	Session       model.Session
+	RequestId     string
+	IpAddress     string
+	Path          string
+	Err           *model.AppError
+	siteURLHeader string
+	teamURLValid  bool
+	teamURL       string
+	T             goi18n.TranslateFunc
+	Locale        string
+	TeamId        string
+	isSystemAdmin bool
 }
 
 func ApiAppHandler(h func(*Context, http.ResponseWriter, *http.Request)) http.Handler {
@@ -101,6 +102,10 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	l4g.Debug("%v", r.URL.Path)
 
+	if metrics := einterfaces.GetMetricsInterface(); metrics != nil && h.isApi {
+		metrics.IncrementHttpRequest()
+	}
+
 	c := &Context{}
 	c.T, c.Locale = utils.GetTranslationsAndLocale(w, r)
 	c.RequestId = model.NewId()
@@ -141,13 +146,10 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		isTokenFromQueryString = true
 	}
 
-	if utils.GetSiteURL() == "" {
-		protocol := GetProtocol(r)
-		c.SetSiteURL(protocol + "://" + r.Host)
-	}
+	c.SetSiteURLHeader(app.GetProtocol(r) + "://" + r.Host)
 
 	w.Header().Set(model.HEADER_REQUEST_ID, c.RequestId)
-	w.Header().Set(model.HEADER_VERSION_ID, fmt.Sprintf("%v.%v.%v", model.CurrentVersion, model.BuildNumber, utils.CfgHash))
+	w.Header().Set(model.HEADER_VERSION_ID, fmt.Sprintf("%v.%v.%v.%v", model.CurrentVersion, model.BuildNumber, utils.ClientCfgHash, utils.IsLicensed))
 	if einterfaces.GetClusterInterface() != nil {
 		w.Header().Set(model.HEADER_CLUSTER_ID, einterfaces.GetClusterInterface().GetClusterId())
 	}
@@ -184,11 +186,11 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.isApi || h.isTeamIndependent {
-		c.setTeamURL(c.GetSiteURL(), false)
+		c.setTeamURL(c.GetSiteURLHeader(), false)
 		c.Path = r.URL.Path
 	} else {
 		splitURL := strings.Split(r.URL.Path, "/")
-		c.setTeamURL(c.GetSiteURL()+"/"+splitURL[1], true)
+		c.setTeamURL(c.GetSiteURLHeader()+"/"+splitURL[1], true)
 		c.Path = "/" + strings.Join(splitURL[2:], "/")
 	}
 
@@ -247,20 +249,10 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.isApi && einterfaces.GetMetricsInterface() != nil {
-		einterfaces.GetMetricsInterface().IncrementHttpRequest()
-
-		if r.URL.Path != model.API_URL_SUFFIX+"/users/websocket" {
+		if r.URL.Path != model.API_URL_SUFFIX_V3+"/users/websocket" {
 			elapsed := float64(time.Since(now)) / float64(time.Second)
 			einterfaces.GetMetricsInterface().ObserveHttpRequestDuration(elapsed)
 		}
-	}
-}
-
-func GetProtocol(r *http.Request) string {
-	if r.Header.Get(model.HEADER_FORWARDED_PROTO) == "https" {
-		return "https"
-	} else {
-		return "http"
 	}
 }
 
@@ -345,11 +337,15 @@ func (c *Context) SystemAdminRequired() {
 		c.Err = model.NewLocAppError("", "api.context.session_expired.app_error", nil, "SystemAdminRequired")
 		c.Err.StatusCode = http.StatusUnauthorized
 		return
-	} else if !HasPermissionToContext(c, model.PERMISSION_MANAGE_SYSTEM) {
+	} else if !c.IsSystemAdmin() {
 		c.Err = model.NewLocAppError("", "api.context.permissions.app_error", nil, "AdminRequired")
 		c.Err.StatusCode = http.StatusForbidden
 		return
 	}
+}
+
+func (c *Context) IsSystemAdmin() bool {
+	return app.SessionHasPermissionTo(c.Session, model.PERMISSION_MANAGE_SYSTEM)
 }
 
 func (c *Context) RemoveSessionCookie(w http.ResponseWriter, r *http.Request) {
@@ -378,6 +374,11 @@ func (c *Context) SetUnknownError(where string, details string) {
 	c.Err = model.NewLocAppError(where, "api.context.unknown.app_error", nil, details)
 }
 
+func (c *Context) SetPermissionError(permission *model.Permission) {
+	c.Err = model.NewLocAppError("Permissions", "api.context.permissions.app_error", nil, "userId="+c.Session.UserId+", "+"permission="+permission.Id)
+	c.Err.StatusCode = http.StatusForbidden
+}
+
 func (c *Context) setTeamURL(url string, valid bool) {
 	c.teamURL = url
 	c.teamURLValid = valid
@@ -385,16 +386,17 @@ func (c *Context) setTeamURL(url string, valid bool) {
 
 func (c *Context) SetTeamURLFromSession() {
 	if result := <-app.Srv.Store.Team().Get(c.TeamId); result.Err == nil {
-		c.setTeamURL(c.GetSiteURL()+"/"+result.Data.(*model.Team).Name, true)
+		c.setTeamURL(c.GetSiteURLHeader()+"/"+result.Data.(*model.Team).Name, true)
 	}
 }
 
-func (c *Context) SetSiteURL(url string) {
-	c.siteURL = strings.TrimRight(url, "/")
+func (c *Context) SetSiteURLHeader(url string) {
+	c.siteURLHeader = strings.TrimRight(url, "/")
 }
 
+// TODO see where these are used
 func (c *Context) GetTeamURLFromTeam(team *model.Team) string {
-	return c.GetSiteURL() + "/" + team.Name
+	return c.GetSiteURLHeader() + "/" + team.Name
 }
 
 func (c *Context) GetTeamURL() string {
@@ -407,8 +409,8 @@ func (c *Context) GetTeamURL() string {
 	return c.teamURL
 }
 
-func (c *Context) GetSiteURL() string {
-	return c.siteURL
+func (c *Context) GetSiteURLHeader() string {
+	return c.siteURLHeader
 }
 
 func (c *Context) GetCurrentTeamMember() *model.TeamMember {
@@ -462,14 +464,14 @@ func Handle404(w http.ResponseWriter, r *http.Request) {
 
 func (c *Context) CheckTeamId() {
 	if c.TeamId != "" && c.Session.GetTeamByTeamId(c.TeamId) == nil {
-		if HasPermissionToContext(c, model.PERMISSION_MANAGE_SYSTEM) {
+		if app.SessionHasPermissionTo(c.Session, model.PERMISSION_MANAGE_SYSTEM) {
 			if result := <-app.Srv.Store.Team().Get(c.TeamId); result.Err != nil {
 				c.Err = result.Err
 				c.Err.StatusCode = http.StatusBadRequest
 				return
 			}
 		} else {
-			// HasPermissionToContext automatically fills the Context error
+			c.SetPermissionError(model.PERMISSION_MANAGE_SYSTEM)
 			return
 		}
 	}

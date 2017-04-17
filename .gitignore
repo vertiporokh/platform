@@ -5,12 +5,15 @@ node_modules
 /dist
 /webapp/dist
 npm-debug.log
+mattermost.mattermost-license
+config/mattermost.mattermost-license
 
 web/static/js/bundle*.js
 web/static/js/bundle*.js.map
 web/static/js/libs*.js
 
 config/active.dat
+config/config.json
 
 # Enteprise imports file
 imports.go
@@ -70,12 +73,16 @@ web/sass-files/sass/.sass-cache/
 data/*
 webapp/data/*
 api/data/*
+api4/data/*
 
 enterprise
 
 cover.out
 ecover.out
+*.test
+webapp/coverage
 
 .agignore
 .ctags
 tags
+.idea

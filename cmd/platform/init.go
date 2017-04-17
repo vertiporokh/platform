@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/mattermost/platform/api"
 	"github.com/mattermost/platform/app"
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/utils"
@@ -17,7 +16,10 @@ func doLoadConfig(filename string) (err string) {
 		}
 	}()
 	utils.TranslationsPreInit()
+	utils.EnableConfigFromEnviromentVars()
 	utils.LoadConfig(filename)
+	utils.InitializeConfigWatch()
+	utils.EnableConfigWatch()
 	return ""
 }
 
@@ -41,6 +43,6 @@ func initDBCommandContext(configFileLocation string) {
 	app.NewServer()
 	app.InitStores()
 	if model.BuildEnterpriseReady == "true" {
-		api.LoadLicense()
+		app.LoadLicense()
 	}
 }

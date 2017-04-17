@@ -45,6 +45,7 @@ export default class PostList extends React.Component {
         this.scrollToBottom = this.scrollToBottom.bind(this);
         this.scrollToBottomAnimated = this.scrollToBottomAnimated.bind(this);
         this.handleKeyDown = this.handleKeyDown.bind(this);
+        this.childComponentDidUpdate = this.childComponentDidUpdate.bind(this);
 
         this.jumpToPostNode = null;
         this.wasAtBottom = true;
@@ -103,6 +104,10 @@ export default class PostList extends React.Component {
     }
 
     isAtBottom() {
+        if (!this.refs.postlist) {
+            return this.wasAtBottom;
+        }
+
         // consider the view to be at the bottom if it's within this many pixels of the bottom
         const atBottomMargin = 10;
 
@@ -119,16 +124,9 @@ export default class PostList extends React.Component {
                 break;
             }
         }
-        this.wasAtBottom = this.isAtBottom();
         if (!this.jumpToPostNode && childNodes.length > 0) {
             this.jumpToPostNode = childNodes[childNodes.length - 1];
         }
-
-        // --- --------
-
-        this.props.postListScrolled(this.isAtBottom());
-        this.prevScrollHeight = this.refs.postlist.scrollHeight;
-        this.prevOffsetTop = this.jumpToPostNode.offsetTop;
 
         this.updateFloatingTimestamp();
 
@@ -137,6 +135,19 @@ export default class PostList extends React.Component {
                 isScrolling: true
             });
         }
+
+        // Postpone all DOM related calculations to next frame.
+        // scrollHeight etc might return wrong data at this point
+        setTimeout(() => {
+            if (!this.refs.postlist) {
+                return;
+            }
+
+            this.wasAtBottom = this.isAtBottom();
+            this.props.postListScrolled(this.isAtBottom());
+            this.prevScrollHeight = this.refs.postlist.scrollHeight;
+            this.prevOffsetTop = this.jumpToPostNode.offsetTop;
+        }, 0);
 
         this.scrollStopAction.fireAfter(Constants.SCROLL_DELAY);
     }
@@ -159,7 +170,7 @@ export default class PostList extends React.Component {
                 const id = this.props.postList.order[i];
                 const element = this.refs[id];
 
-                if (!element || element.offsetTop + element.clientHeight <= this.refs.postlist.scrollTop) {
+                if (!element || !element.domNode || element.domNode.offsetTop + element.domNode.clientHeight <= this.refs.postlist.scrollTop) {
                     // this post is off the top of the screen so the last one is at the top of the screen
                     let topPostId;
 
@@ -328,6 +339,7 @@ export default class PostList extends React.Component {
                 <Post
                     key={keyPrefix + 'postKey'}
                     ref={post.id}
+                    isLastPost={i === 0}
                     sameUser={sameUser}
                     sameRoot={sameRoot}
                     post={post}
@@ -347,6 +359,7 @@ export default class PostList extends React.Component {
                     isFlagged={isFlagged}
                     status={status}
                     isBusy={this.props.isBusy}
+                    childComponentDidUpdateFunction={this.childComponentDidUpdate}
                 />
             );
 
@@ -374,6 +387,7 @@ export default class PostList extends React.Component {
             if ((postUserId !== userId || this.props.ownNewMessage) &&
                     this.props.lastViewed !== 0 &&
                     post.create_at > this.props.lastViewed &&
+                    !Utils.isPostEphemeral(post) &&
                     !renderedLastViewed) {
                 renderedLastViewed = true;
 
@@ -475,8 +489,14 @@ export default class PostList extends React.Component {
     }
 
     scrollToBottomAnimated() {
-        var postList = $(this.refs.postlist);
-        postList.animate({scrollTop: this.refs.postlist.scrollHeight}, '500');
+        if (UserAgent.isIos()) {
+            // JQuery animation doesn't work on iOS
+            this.refs.postlist.scrollTop = this.refs.postlist.scrollHeight;
+        } else {
+            var postList = $(this.refs.postlist);
+
+            postList.animate({scrollTop: this.refs.postlist.scrollHeight}, '500');
+        }
     }
 
     getArchivesIntroMessage() {
@@ -490,6 +510,12 @@ export default class PostList extends React.Component {
                 </h4>
             </div>
         );
+    }
+
+    checkAndUpdateScrolling() {
+        if (this.props.postList != null && this.refs.postlist) {
+            this.updateScrolling();
+        }
     }
 
     componentDidMount() {
@@ -509,9 +535,11 @@ export default class PostList extends React.Component {
     }
 
     componentDidUpdate() {
-        if (this.props.postList != null && this.refs.postlist) {
-            this.updateScrolling();
-        }
+        this.checkAndUpdateScrolling();
+    }
+
+    childComponentDidUpdate() {
+        this.checkAndUpdateScrolling();
     }
 
     render() {

@@ -54,7 +54,7 @@ func registerOAuthApp(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !HasPermissionToContext(c, model.PERMISSION_MANAGE_OAUTH) {
+	if !app.SessionHasPermissionTo(c.Session, model.PERMISSION_MANAGE_OAUTH) {
 		c.Err = model.NewLocAppError("registerOAuthApp", "api.command.admin_only.app_error", nil, "")
 		c.Err.StatusCode = http.StatusForbidden
 		return
@@ -93,14 +93,14 @@ func getOAuthApps(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !HasPermissionToContext(c, model.PERMISSION_MANAGE_OAUTH) {
+	if !app.SessionHasPermissionTo(c.Session, model.PERMISSION_MANAGE_OAUTH) {
 		c.Err = model.NewLocAppError("getOAuthApps", "api.command.admin_only.app_error", nil, "")
 		c.Err.StatusCode = http.StatusForbidden
 		return
 	}
 
 	var ochan store.StoreChannel
-	if HasPermissionToContext(c, model.PERMISSION_MANAGE_SYSTEM_WIDE_OAUTH) {
+	if app.SessionHasPermissionTo(c.Session, model.PERMISSION_MANAGE_SYSTEM_WIDE_OAUTH) {
 		ochan = app.Srv.Store.OAuth().GetApps()
 	} else {
 		c.Err = nil
@@ -271,7 +271,7 @@ func completeOAuth(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	state := r.URL.Query().Get("state")
 
-	uri := c.GetSiteURL() + "/signup/" + service + "/complete"
+	uri := c.GetSiteURLHeader() + "/signup/" + service + "/complete"
 
 	if body, teamId, props, err := AuthorizeOAuthUser(service, code, state, uri); err != nil {
 		c.Err = err
@@ -291,38 +291,38 @@ func completeOAuth(c *Context, w http.ResponseWriter, r *http.Request) {
 				doLogin(c, w, r, user, "")
 			}
 			if c.Err == nil {
-				http.Redirect(w, r, GetProtocol(r)+"://"+r.Host, http.StatusTemporaryRedirect)
+				http.Redirect(w, r, app.GetProtocol(r)+"://"+r.Host, http.StatusTemporaryRedirect)
 			}
 			break
 		case model.OAUTH_ACTION_LOGIN:
 			user := LoginByOAuth(c, w, r, service, body)
 			if len(teamId) > 0 {
-				c.Err = app.JoinUserToTeamById(teamId, user)
+				c.Err = app.AddUserToTeamByTeamId(teamId, user)
 			}
 			if c.Err == nil {
 				if val, ok := props["redirect_to"]; ok {
-					http.Redirect(w, r, c.GetSiteURL()+val, http.StatusTemporaryRedirect)
+					http.Redirect(w, r, c.GetSiteURLHeader()+val, http.StatusTemporaryRedirect)
 					return
 				}
-				http.Redirect(w, r, GetProtocol(r)+"://"+r.Host, http.StatusTemporaryRedirect)
+				http.Redirect(w, r, app.GetProtocol(r)+"://"+r.Host, http.StatusTemporaryRedirect)
 			}
 			break
 		case model.OAUTH_ACTION_EMAIL_TO_SSO:
 			CompleteSwitchWithOAuth(c, w, r, service, body, props["email"])
 			if c.Err == nil {
-				http.Redirect(w, r, GetProtocol(r)+"://"+r.Host+"/login?extra=signin_change", http.StatusTemporaryRedirect)
+				http.Redirect(w, r, app.GetProtocol(r)+"://"+r.Host+"/login?extra=signin_change", http.StatusTemporaryRedirect)
 			}
 			break
 		case model.OAUTH_ACTION_SSO_TO_EMAIL:
 			LoginByOAuth(c, w, r, service, body)
 			if c.Err == nil {
-				http.Redirect(w, r, GetProtocol(r)+"://"+r.Host+"/claim?email="+url.QueryEscape(props["email"]), http.StatusTemporaryRedirect)
+				http.Redirect(w, r, app.GetProtocol(r)+"://"+r.Host+"/claim?email="+url.QueryEscape(props["email"]), http.StatusTemporaryRedirect)
 			}
 			break
 		default:
 			LoginByOAuth(c, w, r, service, body)
 			if c.Err == nil {
-				http.Redirect(w, r, GetProtocol(r)+"://"+r.Host, http.StatusTemporaryRedirect)
+				http.Redirect(w, r, app.GetProtocol(r)+"://"+r.Host, http.StatusTemporaryRedirect)
 			}
 			break
 		}
@@ -361,7 +361,7 @@ func authorizeOAuth(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	// here we should check if the user is logged in
 	if len(c.Session.UserId) == 0 {
-		http.Redirect(w, r, c.GetSiteURL()+"/login?redirect_to="+url.QueryEscape(r.RequestURI), http.StatusFound)
+		http.Redirect(w, r, c.GetSiteURLHeader()+"/login?redirect_to="+url.QueryEscape(r.RequestURI), http.StatusFound)
 		return
 	}
 
@@ -382,7 +382,7 @@ func authorizeOAuth(c *Context, w http.ResponseWriter, r *http.Request) {
 
 		doAllow := func() (*http.Response, *model.AppError) {
 			HttpClient := &http.Client{}
-			url := c.GetSiteURL() + "/api/v3/oauth/allow?response_type=" + model.AUTHCODE_RESPONSE_TYPE + "&client_id=" + clientId + "&redirect_uri=" + url.QueryEscape(redirect) + "&scope=" + scope + "&state=" + url.QueryEscape(state)
+			url := c.GetSiteURLHeader() + "/api/v3/oauth/allow?response_type=" + model.AUTHCODE_RESPONSE_TYPE + "&client_id=" + clientId + "&redirect_uri=" + url.QueryEscape(redirect) + "&scope=" + scope + "&state=" + url.QueryEscape(state)
 			rq, _ := http.NewRequest("GET", url, strings.NewReader(""))
 
 			rq.Header.Set(model.HEADER_AUTH, model.HEADER_BEARER+" "+c.Session.Token)
@@ -702,7 +702,7 @@ func GetAuthorizationCode(c *Context, service string, props map[string]string, l
 	props["hash"] = model.HashPassword(clientId)
 	state := b64.StdEncoding.EncodeToString([]byte(model.MapToJson(props)))
 
-	redirectUri := c.GetSiteURL() + "/signup/" + service + "/complete"
+	redirectUri := utils.GetSiteURL() + "/signup/" + service + "/complete"
 
 	authUrl := endpoint + "?response_type=code&client_id=" + clientId + "&redirect_uri=" + url.QueryEscape(redirectUri) + "&state=" + url.QueryEscape(state)
 
@@ -830,17 +830,22 @@ func CompleteSwitchWithOAuth(c *Context, w http.ResponseWriter, r *http.Request,
 		user = result.Data.(*model.User)
 	}
 
-	RevokeAllSession(c, user.Id)
-	if c.Err != nil {
+	if err := app.RevokeAllSessions(user.Id); err != nil {
+		c.Err = err
 		return
 	}
+	c.LogAuditWithUserId(user.Id, "Revoked all sessions for user")
 
 	if result := <-app.Srv.Store.User().UpdateAuthData(user.Id, service, &authData, ssoEmail, true); result.Err != nil {
 		c.Err = result.Err
 		return
 	}
 
-	go sendSignInChangeEmail(c, user.Email, c.GetSiteURL(), strings.Title(service)+" SSO")
+	go func() {
+		if err := app.SendSignInChangeEmail(user.Email, strings.Title(service)+" SSO", user.Locale, utils.GetSiteURL()); err != nil {
+			l4g.Error(err.Error())
+		}
+	}()
 }
 
 func deleteOAuthApp(c *Context, w http.ResponseWriter, r *http.Request) {
@@ -850,7 +855,7 @@ func deleteOAuthApp(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !HasPermissionToContext(c, model.PERMISSION_MANAGE_OAUTH) {
+	if !app.SessionHasPermissionTo(c.Session, model.PERMISSION_MANAGE_OAUTH) {
 		c.Err = model.NewLocAppError("deleteOAuthApp", "api.command.admin_only.app_error", nil, "")
 		c.Err.StatusCode = http.StatusForbidden
 		return
@@ -870,7 +875,7 @@ func deleteOAuthApp(c *Context, w http.ResponseWriter, r *http.Request) {
 		c.Err = result.Err
 		return
 	} else {
-		if c.Session.UserId != result.Data.(*model.OAuthApp).CreatorId && !HasPermissionToContext(c, model.PERMISSION_MANAGE_SYSTEM_WIDE_OAUTH) {
+		if c.Session.UserId != result.Data.(*model.OAuthApp).CreatorId && !app.SessionHasPermissionTo(c.Session, model.PERMISSION_MANAGE_SYSTEM_WIDE_OAUTH) {
 			c.LogAudit("fail - inappropriate permissions")
 			c.Err = model.NewLocAppError("deleteOAuthApp", "api.oauth.delete.permissions.app_error", nil, "user_id="+c.Session.UserId)
 			return
@@ -895,11 +900,6 @@ func deauthorizeOAuthApp(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	params := mux.Vars(r)
 	id := params["id"]
-
-	if len(id) == 0 {
-		c.SetInvalidParam("deauthorizeOAuthApp", "id")
-		return
-	}
 
 	// revoke app sessions
 	if result := <-app.Srv.Store.OAuth().GetAccessDataByUserForApp(c.Session.UserId, id); result.Err != nil {
@@ -941,11 +941,6 @@ func regenerateOAuthSecret(c *Context, w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	id := params["id"]
 
-	if len(id) == 0 {
-		c.SetInvalidParam("regenerateOAuthSecret", "id")
-		return
-	}
-
 	var oauthApp *model.OAuthApp
 	if result := <-app.Srv.Store.OAuth().GetApp(id); result.Err != nil {
 		c.Err = model.NewLocAppError("regenerateOAuthSecret", "api.oauth.allow_oauth.database.app_error", nil, "")
@@ -953,7 +948,7 @@ func regenerateOAuthSecret(c *Context, w http.ResponseWriter, r *http.Request) {
 	} else {
 		oauthApp = result.Data.(*model.OAuthApp)
 
-		if oauthApp.CreatorId != c.Session.UserId && !HasPermissionToContext(c, model.PERMISSION_MANAGE_SYSTEM_WIDE_OAUTH) {
+		if oauthApp.CreatorId != c.Session.UserId && !app.SessionHasPermissionTo(c.Session, model.PERMISSION_MANAGE_SYSTEM_WIDE_OAUTH) {
 			c.Err = model.NewLocAppError("registerOAuthApp", "api.command.admin_only.app_error", nil, "")
 			c.Err.StatusCode = http.StatusForbidden
 			return

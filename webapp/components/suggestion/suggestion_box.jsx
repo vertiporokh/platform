@@ -25,6 +25,7 @@ export default class SuggestionBox extends React.Component {
         this.handleCompositionEnd = this.handleCompositionEnd.bind(this);
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handlePretextChanged = this.handlePretextChanged.bind(this);
+        this.blur = this.blur.bind(this);
 
         this.suggestionId = Utils.generateId();
         SuggestionStore.registerSuggestionBox(this.suggestionId);
@@ -63,7 +64,7 @@ export default class SuggestionBox extends React.Component {
         setTimeout(() => {
             // Delay this slightly so that we don't clear the suggestions before we run click handlers on SuggestionList
             GlobalActions.emitClearSuggestions(this.suggestionId);
-        }, 100);
+        }, 200);
 
         if (this.props.onBlur) {
             this.props.onBlur();
@@ -153,6 +154,12 @@ export default class SuggestionBox extends React.Component {
         window.requestAnimationFrame(() => {
             Utils.setCaretPosition(textbox, prefix.length + term.length + 1);
         });
+
+        for (const provider of this.props.providers) {
+            if (provider.handleCompleteWord) {
+                provider.handleCompleteWord(term, matchedPretext);
+            }
+        }
     }
 
     handleKeyDown(e) {
@@ -178,9 +185,18 @@ export default class SuggestionBox extends React.Component {
     }
 
     handlePretextChanged(pretext) {
+        let handled = false;
         for (const provider of this.props.providers) {
-            provider.handlePretextChanged(this.suggestionId, pretext);
+            handled = provider.handlePretextChanged(this.suggestionId, pretext) || handled;
         }
+
+        if (!handled) {
+            SuggestionStore.clearSuggestions(this.suggestionId);
+        }
+    }
+
+    blur() {
+        this.refs.textbox.blur();
     }
 
     render() {

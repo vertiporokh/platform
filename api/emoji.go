@@ -211,13 +211,13 @@ func deleteEmoji(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	var emoji *model.Emoji
-	if result := <-app.Srv.Store.Emoji().Get(id); result.Err != nil {
+	if result := <-app.Srv.Store.Emoji().Get(id, false); result.Err != nil {
 		c.Err = result.Err
 		return
 	} else {
 		emoji = result.Data.(*model.Emoji)
 
-		if c.Session.UserId != emoji.CreatorId && !HasPermissionToContext(c, model.PERMISSION_MANAGE_SYSTEM) {
+		if c.Session.UserId != emoji.CreatorId && !app.SessionHasPermissionTo(c.Session, model.PERMISSION_MANAGE_SYSTEM) {
 			c.Err = model.NewLocAppError("deleteEmoji", "api.emoji.delete.permissions.app_error", nil, "user_id="+c.Session.UserId)
 			c.Err.StatusCode = http.StatusUnauthorized
 			return
@@ -269,7 +269,7 @@ func getEmojiImage(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if result := <-app.Srv.Store.Emoji().Get(id); result.Err != nil {
+	if result := <-app.Srv.Store.Emoji().Get(id, true); result.Err != nil {
 		c.Err = result.Err
 		return
 	} else {
@@ -288,6 +288,7 @@ func getEmojiImage(c *Context, w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/"+imageType)
 		}
 
+		w.Header().Set("Cache-Control", "max-age=2592000, public")
 		w.Write(img)
 	}
 }
