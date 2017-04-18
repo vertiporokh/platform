@@ -1,5 +1,6 @@
 
 import Constants from 'utils/constants.jsx';
+import ChannelStore from 'stores/channel_store.jsx';
 const Preferences = Constants.Preferences;
 
 import * as Utils from 'utils/utils.jsx';
@@ -100,6 +101,26 @@ export function sortChannelsByDisplayName(a, b) {
 
     if (a.type !== b.type && typeToPrefixMap[a.type] !== typeToPrefixMap[b.type]) {
         return (typeToPrefixMap[a.type] || defaultPrefix).localeCompare((typeToPrefixMap[b.type] || defaultPrefix), locale);
+    }
+
+    const unreads = ChannelStore.getUnreadCounts();
+    const members = ChannelStore.getMyMembers();
+
+    if (
+        (unreads[a.id] && (unreads[a.id].msgs + unreads[a.id].mentions) > 0) ||
+        (members[a.id] &&  members[a.id].mention_count                  > 0)
+    ) {
+        if (
+            (!unreads[b.id] || (unreads[b.id] && (unreads[b.id].msgs + unreads[b.id].mentions) == 0)) &&
+            (!members[b.id] || (members[b.id] &&  members[b.id].mention_count                  == 0))
+        ) {
+            return -1;
+        }
+    } else if (
+        (unreads[b.id] && (unreads[b.id].msgs + unreads[b.id].mentions) > 0) ||
+        (members[b.id] &&  members[b.id].mention_count                  > 0)
+    ) {
+        return 1;
     }
 
     const aDisplayName = getChannelDisplayName(a);
