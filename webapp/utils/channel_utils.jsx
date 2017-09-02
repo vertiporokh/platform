@@ -1,6 +1,5 @@
 
 import Constants from 'utils/constants.jsx';
-import ChannelStore from 'stores/channel_store.jsx';
 const Preferences = Constants.Preferences;
 
 import * as Utils from 'utils/utils.jsx';
