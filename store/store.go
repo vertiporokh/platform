@@ -42,7 +42,7 @@ type Store interface {
 	Command() CommandStore
 	Preference() PreferenceStore
 	License() LicenseStore
-	PasswordRecovery() PasswordRecoveryStore
+	Token() TokenStore
 	Emoji() EmojiStore
 	Status() StatusStore
 	FileInfo() FileInfoStore
@@ -52,6 +52,7 @@ type Store interface {
 	DropAllTables()
 	TotalMasterDbConnections() int
 	TotalReadDbConnections() int
+	TotalSearchDbConnections() int
 }
 
 type TeamStore interface {
@@ -102,6 +103,7 @@ type ChannelStore interface {
 	GetByName(team_id string, name string, allowFromCache bool) StoreChannel
 	GetByNameIncludeDeleted(team_id string, name string, allowFromCache bool) StoreChannel
 	GetDeletedByName(team_id string, name string) StoreChannel
+	GetDeleted(team_id string, offset int, limit int) StoreChannel
 	GetChannels(teamId string, userId string) StoreChannel
 	GetMoreChannels(teamId string, userId string, offset int, limit int) StoreChannel
 	GetPublicChannelsForTeam(teamId string, offset int, limit int) StoreChannel
@@ -322,11 +324,11 @@ type LicenseStore interface {
 	Get(id string) StoreChannel
 }
 
-type PasswordRecoveryStore interface {
-	SaveOrUpdate(recovery *model.PasswordRecovery) StoreChannel
-	Delete(userId string) StoreChannel
-	Get(userId string) StoreChannel
-	GetByCode(code string) StoreChannel
+type TokenStore interface {
+	Save(recovery *model.Token) StoreChannel
+	Delete(token string) StoreChannel
+	GetByToken(token string) StoreChannel
+	Cleanup()
 }
 
 type EmojiStore interface {

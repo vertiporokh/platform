@@ -234,24 +234,44 @@ func (c *Client4) GetEmojisRoute() string {
 	return fmt.Sprintf("/emoji")
 }
 
+func (c *Client4) GetEmojiRoute(emojiId string) string {
+	return fmt.Sprintf(c.GetEmojisRoute()+"/%v", emojiId)
+}
+
+func (c *Client4) GetReactionsRoute() string {
+	return fmt.Sprintf("/reactions")
+}
+
+func (c *Client4) GetOAuthAppsRoute() string {
+	return fmt.Sprintf("/oauth/apps")
+}
+
+func (c *Client4) GetOAuthAppRoute(appId string) string {
+	return fmt.Sprintf("/oauth/apps/%v", appId)
+}
+
+func (c *Client4) GetOpenGraphRoute() string {
+	return fmt.Sprintf("/opengraph")
+}
+
 func (c *Client4) DoApiGet(url string, etag string) (*http.Response, *AppError) {
-	return c.DoApiRequest(http.MethodGet, url, "", etag)
+	return c.DoApiRequest(http.MethodGet, c.ApiUrl+url, "", etag)
 }
 
 func (c *Client4) DoApiPost(url string, data string) (*http.Response, *AppError) {
-	return c.DoApiRequest(http.MethodPost, url, data, "")
+	return c.DoApiRequest(http.MethodPost, c.ApiUrl+url, data, "")
 }
 
 func (c *Client4) DoApiPut(url string, data string) (*http.Response, *AppError) {
-	return c.DoApiRequest(http.MethodPut, url, data, "")
+	return c.DoApiRequest(http.MethodPut, c.ApiUrl+url, data, "")
 }
 
 func (c *Client4) DoApiDelete(url string) (*http.Response, *AppError) {
-	return c.DoApiRequest(http.MethodDelete, url, "", "")
+	return c.DoApiRequest(http.MethodDelete, c.ApiUrl+url, "", "")
 }
 
 func (c *Client4) DoApiRequest(method, url, data, etag string) (*http.Response, *AppError) {
-	rq, _ := http.NewRequest(method, c.ApiUrl+url, strings.NewReader(data))
+	rq, _ := http.NewRequest(method, url, strings.NewReader(data))
 	rq.Close = true
 
 	if len(etag) > 0 {
@@ -431,6 +451,40 @@ func (c *Client4) CreateUser(user *User) (*User, *Response) {
 	}
 }
 
+// CreateUserWithHash creates a user in the system based on the provided user struct and hash created.
+func (c *Client4) CreateUserWithHash(user *User, hash, data string) (*User, *Response) {
+	var query string
+	if hash != "" && data != "" {
+		query = fmt.Sprintf("?d=%v&h=%v", url.QueryEscape(data), hash)
+	} else {
+		err := NewAppError("MissingHashOrData", "api.user.create_user.missing_hash_or_data.app_error", nil, "", http.StatusBadRequest)
+		return nil, &Response{StatusCode: err.StatusCode, Error: err}
+	}
+	if r, err := c.DoApiPost(c.GetUsersRoute()+query, user.ToJson()); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return UserFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// CreateUserWithInviteId creates a user in the system based on the provided invited id.
+func (c *Client4) CreateUserWithInviteId(user *User, inviteId string) (*User, *Response) {
+	var query string
+	if inviteId != "" {
+		query = fmt.Sprintf("?iid=%v", url.QueryEscape(inviteId))
+	} else {
+		err := NewAppError("MissingInviteId", "api.user.create_user.missing_invite_id.app_error", nil, "", http.StatusBadRequest)
+		return nil, &Response{StatusCode: err.StatusCode, Error: err}
+	}
+	if r, err := c.DoApiPost(c.GetUsersRoute()+query, user.ToJson()); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return UserFromJson(r.Body), BuildResponse(r)
+	}
+}
+
 // GetMe returns the logged in user.
 func (c *Client4) GetMe(etag string) (*User, *Response) {
 	if r, err := c.DoApiGet(c.GetUserRoute(ME), etag); err != nil {
@@ -591,6 +645,16 @@ func (c *Client4) GetUsersByIds(userIds []string) ([]*User, *Response) {
 	}
 }
 
+// GetUsersByUsernames returns a list of users based on the provided usernames.
+func (c *Client4) GetUsersByUsernames(usernames []string) ([]*User, *Response) {
+	if r, err := c.DoApiPost(c.GetUsersRoute()+"/usernames", ArrayToJson(usernames)); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return UserListFromJson(r.Body), BuildResponse(r)
+	}
+}
+
 // SearchUsers returns a list of users based on some search criteria.
 func (c *Client4) SearchUsers(search *UserSearch) ([]*User, *Response) {
 	if r, err := c.DoApiPost(c.GetUsersRoute()+"/search", search.ToJson()); err != nil {
@@ -689,6 +753,19 @@ func (c *Client4) UpdateUserRoles(userId, roles string) (bool, *Response) {
 	}
 }
 
+// UpdateUserActive updates status of a user whether active or not.
+func (c *Client4) UpdateUserActive(userId string, active bool) (bool, *Response) {
+	requestBody := make(map[string]interface{})
+	requestBody["active"] = active
+
+	if r, err := c.DoApiPut(c.GetUserRoute(userId)+"/active", StringInterfaceToJson(requestBody)); err != nil {
+		return false, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return CheckStatusOK(r), BuildResponse(r)
+	}
+}
+
 // DeleteUser deactivates a user in the system based on the provided user id string.
 func (c *Client4) DeleteUser(userId string) (bool, *Response) {
 	if r, err := c.DoApiDelete(c.GetUserRoute(userId)); err != nil {
@@ -712,8 +789,8 @@ func (c *Client4) SendPasswordResetEmail(email string) (bool, *Response) {
 }
 
 // ResetPassword uses a recovery code to update reset a user's password.
-func (c *Client4) ResetPassword(code, newPassword string) (bool, *Response) {
-	requestBody := map[string]string{"code": code, "new_password": newPassword}
+func (c *Client4) ResetPassword(token, newPassword string) (bool, *Response) {
+	requestBody := map[string]string{"token": token, "new_password": newPassword}
 	if r, err := c.DoApiPost(c.GetUsersRoute()+"/password/reset", MapToJson(requestBody)); err != nil {
 		return false, &Response{StatusCode: r.StatusCode, Error: err}
 	} else {
@@ -782,9 +859,9 @@ func (c *Client4) GetUserAudits(userId string, page int, perPage int, etag strin
 	}
 }
 
-// VerifyUserEmail will verify a user's email using user id and hash strings.
-func (c *Client4) VerifyUserEmail(userId, hashId string) (bool, *Response) {
-	requestBody := map[string]string{"user_id": userId, "hash_id": hashId}
+// VerifyUserEmail will verify a user's email using the supplied token.
+func (c *Client4) VerifyUserEmail(token string) (bool, *Response) {
+	requestBody := map[string]string{"token": token}
 	if r, err := c.DoApiPost(c.GetUsersRoute()+"/email/verify", MapToJson(requestBody)); err != nil {
 		return false, &Response{StatusCode: r.StatusCode, Error: err}
 	} else {
@@ -1152,6 +1229,16 @@ func (c *Client4) CreateDirectChannel(userId1, userId2 string) (*Channel, *Respo
 	}
 }
 
+// CreateGroupChannel creates a group message channel based on userIds provided
+func (c *Client4) CreateGroupChannel(userIds []string) (*Channel, *Response) {
+	if r, err := c.DoApiPost(c.GetChannelsRoute()+"/group", ArrayToJson(userIds)); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return ChannelFromJson(r.Body), BuildResponse(r)
+	}
+}
+
 // GetChannel returns a channel based on the provided channel id string.
 func (c *Client4) GetChannel(channelId, etag string) (*Channel, *Response) {
 	if r, err := c.DoApiGet(c.GetChannelRoute(channelId), etag); err != nil {
@@ -1183,43 +1270,54 @@ func (c *Client4) GetPinnedPosts(channelId string, etag string) (*PostList, *Res
 }
 
 // GetPublicChannelsForTeam returns a list of public channels based on the provided team id string.
-func (c *Client4) GetPublicChannelsForTeam(teamId string, page int, perPage int, etag string) (*ChannelList, *Response) {
+func (c *Client4) GetPublicChannelsForTeam(teamId string, page int, perPage int, etag string) ([]*Channel, *Response) {
 	query := fmt.Sprintf("?page=%v&per_page=%v", page, perPage)
 	if r, err := c.DoApiGet(c.GetChannelsForTeamRoute(teamId)+query, etag); err != nil {
 		return nil, &Response{StatusCode: r.StatusCode, Error: err}
 	} else {
 		defer closeBody(r)
-		return ChannelListFromJson(r.Body), BuildResponse(r)
+		return ChannelSliceFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// GetDeletedChannelsForTeam returns a list of public channels based on the provided team id string.
+func (c *Client4) GetDeletedChannelsForTeam(teamId string, page int, perPage int, etag string) ([]*Channel, *Response) {
+	query := fmt.Sprintf("/deleted?page=%v&per_page=%v", page, perPage)
+	if r, err := c.DoApiGet(c.GetChannelsForTeamRoute(teamId)+query, etag); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return ChannelSliceFromJson(r.Body), BuildResponse(r)
 	}
 }
 
 // GetPublicChannelsByIdsForTeam returns a list of public channels based on provided team id string
-func (c *Client4) GetPublicChannelsByIdsForTeam(teamId string, channelIds []string) (*ChannelList, *Response) {
+func (c *Client4) GetPublicChannelsByIdsForTeam(teamId string, channelIds []string) ([]*Channel, *Response) {
 	if r, err := c.DoApiPost(c.GetChannelsForTeamRoute(teamId)+"/ids", ArrayToJson(channelIds)); err != nil {
 		return nil, &Response{StatusCode: r.StatusCode, Error: err}
 	} else {
 		defer closeBody(r)
-		return ChannelListFromJson(r.Body), BuildResponse(r)
+		return ChannelSliceFromJson(r.Body), BuildResponse(r)
 	}
 }
 
 // GetChannelsForTeamForUser returns a list channels of on a team for a user.
-func (c *Client4) GetChannelsForTeamForUser(teamId, userId, etag string) (*ChannelList, *Response) {
+func (c *Client4) GetChannelsForTeamForUser(teamId, userId, etag string) ([]*Channel, *Response) {
 	if r, err := c.DoApiGet(c.GetUserRoute(userId)+c.GetTeamRoute(teamId)+"/channels", etag); err != nil {
 		return nil, &Response{StatusCode: r.StatusCode, Error: err}
 	} else {
 		defer closeBody(r)
-		return ChannelListFromJson(r.Body), BuildResponse(r)
+		return ChannelSliceFromJson(r.Body), BuildResponse(r)
 	}
 }
 
 // SearchChannels returns the channels on a team matching the provided search term.
-func (c *Client4) SearchChannels(teamId string, search *ChannelSearch) (*ChannelList, *Response) {
+func (c *Client4) SearchChannels(teamId string, search *ChannelSearch) ([]*Channel, *Response) {
 	if r, err := c.DoApiPost(c.GetChannelsForTeamRoute(teamId)+"/search", search.ToJson()); err != nil {
 		return nil, &Response{StatusCode: r.StatusCode, Error: err}
 	} else {
 		defer closeBody(r)
-		return ChannelListFromJson(r.Body), BuildResponse(r)
+		return ChannelSliceFromJson(r.Body), BuildResponse(r)
 	}
 }
 
@@ -2190,6 +2288,113 @@ func (c *Client4) GetLogs(page, perPage int) ([]string, *Response) {
 	}
 }
 
+// PostLog is a convenience Web Service call so clients can log messages into
+// the server-side logs.  For example we typically log javascript error messages
+// into the server-side.  It returns the log message if the logging was successful.
+func (c *Client4) PostLog(message map[string]string) (map[string]string, *Response) {
+	if r, err := c.DoApiPost("/logs", MapToJson(message)); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return MapFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// OAuth Section
+
+// CreateOAuthApp will register a new OAuth 2.0 client application with Mattermost acting as an OAuth 2.0 service provider.
+func (c *Client4) CreateOAuthApp(app *OAuthApp) (*OAuthApp, *Response) {
+	if r, err := c.DoApiPost(c.GetOAuthAppsRoute(), app.ToJson()); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return OAuthAppFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// GetOAuthApps gets a page of registered OAuth 2.0 client applications with Mattermost acting as an OAuth 2.0 service provider.
+func (c *Client4) GetOAuthApps(page, perPage int) ([]*OAuthApp, *Response) {
+	query := fmt.Sprintf("?page=%v&per_page=%v", page, perPage)
+	if r, err := c.DoApiGet(c.GetOAuthAppsRoute()+query, ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return OAuthAppListFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// GetOAuthApp gets a registered OAuth 2.0 client application with Mattermost acting as an OAuth 2.0 service provider.
+func (c *Client4) GetOAuthApp(appId string) (*OAuthApp, *Response) {
+	if r, err := c.DoApiGet(c.GetOAuthAppRoute(appId), ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return OAuthAppFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// GetOAuthAppInfo gets a sanitized version of a registered OAuth 2.0 client application with Mattermost acting as an OAuth 2.0 service provider.
+func (c *Client4) GetOAuthAppInfo(appId string) (*OAuthApp, *Response) {
+	if r, err := c.DoApiGet(c.GetOAuthAppRoute(appId)+"/info", ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return OAuthAppFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// DeleteOAuthApp deletes a registered OAuth 2.0 client application.
+func (c *Client4) DeleteOAuthApp(appId string) (bool, *Response) {
+	if r, err := c.DoApiDelete(c.GetOAuthAppRoute(appId)); err != nil {
+		return false, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return CheckStatusOK(r), BuildResponse(r)
+	}
+}
+
+// RegenerateOAuthAppSecret regenerates the client secret for a registered OAuth 2.0 client application.
+func (c *Client4) RegenerateOAuthAppSecret(appId string) (*OAuthApp, *Response) {
+	if r, err := c.DoApiPost(c.GetOAuthAppRoute(appId)+"/regen_secret", ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return OAuthAppFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// GetAuthorizedOAuthAppsForUser gets a page of OAuth 2.0 client applications the user has authorized to use access their account.
+func (c *Client4) GetAuthorizedOAuthAppsForUser(userId string, page, perPage int) ([]*OAuthApp, *Response) {
+	query := fmt.Sprintf("?page=%v&per_page=%v", page, perPage)
+	if r, err := c.DoApiGet(c.GetUserRoute(userId)+"/oauth/apps/authorized"+query, ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return OAuthAppListFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// AuthorizeOAuthApp will authorize an OAuth 2.0 client application to access a user's account and provide a redirect link to follow.
+func (c *Client4) AuthorizeOAuthApp(authRequest *AuthorizeRequest) (string, *Response) {
+	if r, err := c.DoApiRequest(http.MethodPost, c.Url+"/oauth/authorize", authRequest.ToJson(), ""); err != nil {
+		return "", &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return MapFromJson(r.Body)["redirect"], BuildResponse(r)
+	}
+}
+
+// DeauthorizeOAuthApp will deauthorize an OAuth 2.0 client application from accessing a user's account.
+func (c *Client4) DeauthorizeOAuthApp(appId string) (bool, *Response) {
+	requestData := map[string]string{"client_id": appId}
+	if r, err := c.DoApiRequest(http.MethodPost, c.Url+"/oauth/deauthorize", MapToJson(requestData), ""); err != nil {
+		return false, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return CheckStatusOK(r), BuildResponse(r)
+	}
+}
+
 // Commands Section
 
 // CreateCommand will create a new command if the user have the right permissions.
@@ -2233,6 +2438,17 @@ func (c *Client4) ListCommands(teamId string, customOnly bool) ([]*Command, *Res
 	}
 }
 
+// ExecuteCommand executes a given command.
+func (c *Client4) ExecuteCommand(channelId, command string) (*CommandResponse, *Response) {
+	commandArgs := &CommandArgs{ChannelId: channelId, Command: command}
+	if r, err := c.DoApiPost(c.GetCommandsRoute()+"/execute", commandArgs.ToJson()); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return CommandResponseFromJson(r.Body), BuildResponse(r)
+	}
+}
+
 // ListCommands will retrieve a list of commands available in the team.
 func (c *Client4) ListAutocompleteCommands(teamId string) ([]*Command, *Response) {
 	if r, err := c.DoApiGet(c.GetTeamAutoCompleteCommandsRoute(teamId), ""); err != nil {
@@ -2240,6 +2456,16 @@ func (c *Client4) ListAutocompleteCommands(teamId string) ([]*Command, *Response
 	} else {
 		defer closeBody(r)
 		return CommandListFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// RegenCommandToken will create a new token if the user have the right permissions.
+func (c *Client4) RegenCommandToken(commandId string) (string, *Response) {
+	if r, err := c.DoApiPut(c.GetCommandRoute(commandId)+"/regen_token", ""); err != nil {
+		return "", &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return MapFromJson(r.Body)["token"], BuildResponse(r)
 	}
 }
 
@@ -2273,6 +2499,19 @@ func (c *Client4) UpdateUserStatus(userId string, userStatus *Status) (*Status, 
 		defer closeBody(r)
 		return StatusFromJson(r.Body), BuildResponse(r)
 
+	}
+}
+
+// Webrtc Section
+
+// GetWebrtcToken returns a valid token, stun server and turn server with credentials to
+// use with the Mattermost WebRTC service.
+func (c *Client4) GetWebrtcToken() (*WebrtcInfoResponse, *Response) {
+	if r, err := c.DoApiGet("/webrtc/token", ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return WebrtcInfoResponseFromJson(r.Body), BuildResponse(r)
 	}
 }
 
@@ -2312,7 +2551,48 @@ func (c *Client4) GetEmojiList() ([]*Emoji, *Response) {
 	}
 }
 
+// DeleteEmoji delete an custom emoji on the provided emoji id string.
+func (c *Client4) DeleteEmoji(emojiId string) (bool, *Response) {
+	if r, err := c.DoApiDelete(c.GetEmojiRoute(emojiId)); err != nil {
+		return false, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return CheckStatusOK(r), BuildResponse(r)
+	}
+}
+
+// GetEmoji returns a custom emoji in the system on the provided emoji id string.
+func (c *Client4) GetEmoji(emojiId string) (*Emoji, *Response) {
+	if r, err := c.DoApiGet(c.GetEmojiRoute(emojiId), ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return EmojiFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// GetEmojiImage returns the emoji image.
+func (c *Client4) GetEmojiImage(emojiId string) ([]byte, *Response) {
+	if r, err := c.DoApiGet(c.GetEmojiRoute(emojiId)+"/image", ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else if data, err := ioutil.ReadAll(r.Body); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: NewAppError("GetEmojiImage", "model.client.read_file.app_error", nil, err.Error(), r.StatusCode)}
+	} else {
+		return data, BuildResponse(r)
+	}
+}
+
 // Reaction Section
+
+// SaveReaction saves an emoji reaction for a post. Returns the saved reaction if successful, otherwise an error will be returned.
+func (c *Client4) SaveReaction(reaction *Reaction) (*Reaction, *Response) {
+	if r, err := c.DoApiPost(c.GetReactionsRoute(), reaction.ToJson()); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return ReactionFromJson(r.Body), BuildResponse(r)
+	}
+}
 
 // GetReactions returns a list of reactions to a post.
 func (c *Client4) GetReactions(postId string) ([]*Reaction, *Response) {
@@ -2321,5 +2601,30 @@ func (c *Client4) GetReactions(postId string) ([]*Reaction, *Response) {
 	} else {
 		defer closeBody(r)
 		return ReactionsFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// DeleteReaction deletes reaction of a user in a post.
+func (c *Client4) DeleteReaction(reaction *Reaction) (bool, *Response) {
+	if r, err := c.DoApiDelete(c.GetUserRoute(reaction.UserId) + c.GetPostRoute(reaction.PostId) + fmt.Sprintf("/reactions/%v", reaction.EmojiName)); err != nil {
+		return false, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return CheckStatusOK(r), BuildResponse(r)
+	}
+}
+
+// Open Graph Metadata Section
+
+// OpenGraph return the open graph metadata for a particular url if the site have the metadata
+func (c *Client4) OpenGraph(url string) (map[string]string, *Response) {
+	requestBody := make(map[string]string)
+	requestBody["url"] = url
+
+	if r, err := c.DoApiPost(c.GetOpenGraphRoute(), MapToJson(requestBody)); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return MapFromJson(r.Body), BuildResponse(r)
 	}
 }

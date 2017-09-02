@@ -185,6 +185,20 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// TEMPORARY CODE FOR 3.9, REMOVE FOR 3.10
+	if cookie, err := r.Cookie(model.SESSION_COOKIE_TOKEN); err == nil && c.Session.UserId != "" {
+		if _, err = r.Cookie(model.SESSION_COOKIE_USER); err != nil {
+			http.SetCookie(w, &http.Cookie{
+				Name:    model.SESSION_COOKIE_USER,
+				Value:   c.Session.UserId,
+				Path:    "/",
+				MaxAge:  cookie.MaxAge,
+				Expires: cookie.Expires,
+				Secure:  cookie.Secure,
+			})
+		}
+	}
+
 	if h.isApi || h.isTeamIndependent {
 		c.setTeamURL(c.GetSiteURLHeader(), false)
 		c.Path = r.URL.Path
@@ -208,6 +222,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if c.Err == nil && h.isUserActivity && token != "" && len(c.Session.UserId) > 0 {
 		app.SetStatusOnline(c.Session.UserId, c.Session.Id, false)
+		app.UpdateLastActivityAtIfNeeded(c.Session)
 	}
 
 	if c.Err == nil && (h.requireUser || h.requireSystemAdmin) {
@@ -242,7 +257,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if c.Err.StatusCode == http.StatusUnauthorized {
 				http.Redirect(w, r, c.GetTeamURL()+"/?redirect="+url.QueryEscape(r.URL.Path), http.StatusTemporaryRedirect)
 			} else {
-				RenderWebError(c.Err, w, r)
+				utils.RenderWebError(c.Err, w, r)
 			}
 		}
 
@@ -281,14 +296,14 @@ func (c *Context) LogError(err *model.AppError) {
 	if c.Path == "/api/v3/users/websocket" && err.StatusCode == 401 || err.Id == "web.check_browser_compatibility.app_error" {
 		c.LogDebug(err)
 	} else {
-		l4g.Error(utils.T("api.context.log.error"), c.Path, err.Where, err.StatusCode,
-			c.RequestId, c.Session.UserId, c.IpAddress, err.SystemMessage(utils.T), err.DetailedError)
+		l4g.Error(utils.TDefault("api.context.log.error"), c.Path, err.Where, err.StatusCode,
+			c.RequestId, c.Session.UserId, c.IpAddress, err.SystemMessage(utils.TDefault), err.DetailedError)
 	}
 }
 
 func (c *Context) LogDebug(err *model.AppError) {
-	l4g.Debug(utils.T("api.context.log.error"), c.Path, err.Where, err.StatusCode,
-		c.RequestId, c.Session.UserId, c.IpAddress, err.SystemMessage(utils.T), err.DetailedError)
+	l4g.Debug(utils.TDefault("api.context.log.error"), c.Path, err.Where, err.StatusCode,
+		c.RequestId, c.Session.UserId, c.IpAddress, err.SystemMessage(utils.TDefault), err.DetailedError)
 }
 
 func (c *Context) UserRequired() {
@@ -357,7 +372,15 @@ func (c *Context) RemoveSessionCookie(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 	}
 
+	userCookie := &http.Cookie{
+		Name:   model.SESSION_COOKIE_USER,
+		Value:  "",
+		Path:   "/",
+		MaxAge: -1,
+	}
+
 	http.SetCookie(w, cookie)
+	http.SetCookie(w, userCookie)
 }
 
 func (c *Context) SetInvalidParam(where string, name string) {
@@ -421,31 +444,6 @@ func IsApiCall(r *http.Request) bool {
 	return strings.Index(r.URL.Path, "/api/") == 0
 }
 
-func RenderWebError(err *model.AppError, w http.ResponseWriter, r *http.Request) {
-	T, _ := utils.GetTranslationsAndLocale(w, r)
-
-	title := T("api.templates.error.title", map[string]interface{}{"SiteName": utils.ClientCfg["SiteName"]})
-	message := err.Message
-	details := err.DetailedError
-	link := "/"
-	linkMessage := T("api.templates.error.link")
-
-	status := http.StatusTemporaryRedirect
-	if err.StatusCode != http.StatusInternalServerError {
-		status = err.StatusCode
-	}
-
-	http.Redirect(
-		w,
-		r,
-		"/error?title="+url.QueryEscape(title)+
-			"&message="+url.QueryEscape(message)+
-			"&details="+url.QueryEscape(details)+
-			"&link="+url.QueryEscape(link)+
-			"&linkmessage="+url.QueryEscape(linkMessage),
-		status)
-}
-
 func Handle404(w http.ResponseWriter, r *http.Request) {
 	err := model.NewLocAppError("Handle404", "api.context.404.app_error", nil, "")
 	err.Translate(utils.T)
@@ -458,7 +456,7 @@ func Handle404(w http.ResponseWriter, r *http.Request) {
 		err.DetailedError = "There doesn't appear to be an api call for the url='" + r.URL.Path + "'.  Typo? are you missing a team_id or user_id as part of the url?"
 		w.Write([]byte(err.ToJson()))
 	} else {
-		RenderWebError(err, w, r)
+		utils.RenderWebError(err, w, r)
 	}
 }
 

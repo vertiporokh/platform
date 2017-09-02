@@ -297,7 +297,7 @@ var reservedName = []string{
 
 func IsValidChannelIdentifier(s string) bool {
 
-	if !IsValidAlphaNum(s, true) {
+	if !IsValidAlphaNumHyphenUnderscore(s, true) {
 		return false
 	}
 
@@ -308,22 +308,20 @@ func IsValidChannelIdentifier(s string) bool {
 	return true
 }
 
-var validAlphaNumUnderscore = regexp.MustCompile(`^[a-z0-9]+([a-z\-\_0-9]+|(__)?)[a-z0-9]+$`)
-var validAlphaNum = regexp.MustCompile(`^[a-z0-9]+([a-z\-0-9]+|(__)?)[a-z0-9]+$`)
+func IsValidAlphaNum(s string) bool {
+	validAlphaNum := regexp.MustCompile(`^[a-z0-9]+([a-z\-0-9]+|(__)?)[a-z0-9]+$`)
 
-func IsValidAlphaNum(s string, allowUnderscores bool) bool {
-	var match bool
-	if allowUnderscores {
-		match = validAlphaNumUnderscore.MatchString(s)
-	} else {
-		match = validAlphaNum.MatchString(s)
+	return validAlphaNum.MatchString(s)
+}
+
+func IsValidAlphaNumHyphenUnderscore(s string, withFormat bool) bool {
+	if withFormat {
+		validAlphaNumHyphenUnderscore := regexp.MustCompile(`^[a-z0-9]+([a-z\-\_0-9]+|(__)?)[a-z0-9]+$`)
+		return validAlphaNumHyphenUnderscore.MatchString(s)
 	}
 
-	if !match {
-		return false
-	}
-
-	return true
+	validSimpleAlphaNumHyphenUnderscore := regexp.MustCompile(`^[a-zA-Z0-9\-_]+$`)
+	return validSimpleAlphaNumHyphenUnderscore.MatchString(s)
 }
 
 func Etag(parts ...interface{}) string {
@@ -402,8 +400,6 @@ func ClearMentionTags(post string) string {
 
 var UrlRegex = regexp.MustCompile(`^((?:[a-z]+:\/\/)?(?:(?:[a-z0-9\-]+\.)+(?:[a-z]{2}|aero|arpa|biz|com|coop|edu|gov|info|int|jobs|mil|museum|name|nato|net|org|pro|travel|local|internal))(:[0-9]{1,5})?(?:\/[a-z0-9_\-\.~]+)*(\/([a-z0-9_\-\.]*)(?:\?[a-z0-9+_~\-\.%=&amp;]*)?)?(?:#[a-zA-Z0-9!$&'()*+.=-_~:@/?]*)?)(?:\s+|$)$`)
 var PartialUrlRegex = regexp.MustCompile(`/([A-Za-z0-9]{26})/([A-Za-z0-9]{26})/((?:[A-Za-z0-9]{26})?.+(?:\.[A-Za-z0-9]{3,})?)`)
-
-var SplitRunes = map[rune]bool{',': true, ' ': true, '.': true, '!': true, '?': true, ':': true, ';': true, '\n': true, '<': true, '>': true, '(': true, ')': true, '{': true, '}': true, '[': true, ']': true, '+': true, '/': true, '\\': true, '^': true, '#': true, '$': true, '&': true}
 
 func IsValidHttpUrl(rawUrl string) bool {
 	if strings.Index(rawUrl, "http://") != 0 && strings.Index(rawUrl, "https://") != 0 {

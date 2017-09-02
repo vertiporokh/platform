@@ -75,12 +75,15 @@ const (
 
 	EMAIL_SETTINGS_DEFAULT_FEEDBACK_ORGANIZATION = ""
 
-	SUPPORT_SETTINGS_DEFAULT_TERMS_OF_SERVICE_LINK = "https://about.mattermost.com/default-terms/"
-	SUPPORT_SETTINGS_DEFAULT_PRIVACY_POLICY_LINK   = "https://about.mattermost.com/default-privacy-policy/"
-	SUPPORT_SETTINGS_DEFAULT_ABOUT_LINK            = "https://about.mattermost.com/default-about/"
-	SUPPORT_SETTINGS_DEFAULT_HELP_LINK             = "https://about.mattermost.com/default-help/"
-	SUPPORT_SETTINGS_DEFAULT_REPORT_A_PROBLEM_LINK = "https://about.mattermost.com/default-report-a-problem/"
-	SUPPORT_SETTINGS_DEFAULT_SUPPORT_EMAIL         = "feedback@mattermost.com"
+	SUPPORT_SETTINGS_DEFAULT_TERMS_OF_SERVICE_LINK      = "https://about.mattermost.com/default-terms/"
+	SUPPORT_SETTINGS_DEFAULT_PRIVACY_POLICY_LINK        = "https://about.mattermost.com/default-privacy-policy/"
+	SUPPORT_SETTINGS_DEFAULT_ABOUT_LINK                 = "https://about.mattermost.com/default-about/"
+	SUPPORT_SETTINGS_DEFAULT_HELP_LINK                  = "https://about.mattermost.com/default-help/"
+	SUPPORT_SETTINGS_DEFAULT_REPORT_A_PROBLEM_LINK      = "https://about.mattermost.com/default-report-a-problem/"
+	SUPPORT_SETTINGS_DEFAULT_ADMINISTRATORS_GUIDE_LINK  = "https://about.mattermost.com/administrators-guide/"
+	SUPPORT_SETTINGS_DEFAULT_TROUBLESHOOTING_FORUM_LINK = "https://about.mattermost.com/troubleshooting-forum/"
+	SUPPORT_SETTINGS_DEFAULT_COMMERCIAL_SUPPORT_LINK    = "https://about.mattermost.com/commercial-support/"
+	SUPPORT_SETTINGS_DEFAULT_SUPPORT_EMAIL              = "feedback@mattermost.com"
 
 	LDAP_SETTINGS_DEFAULT_FIRST_NAME_ATTRIBUTE = ""
 	LDAP_SETTINGS_DEFAULT_LAST_NAME_ATTRIBUTE  = ""
@@ -151,7 +154,9 @@ type ServiceSettings struct {
 	AllowEditPost                            *string
 	PostEditTimeLimit                        *int
 	TimeBetweenUserTypingUpdatesMilliseconds *int64
+	EnablePostSearch                         *bool
 	EnableUserTypingMessages                 *bool
+	EnableUserStatuses                       *bool
 	ClusterLogTimeoutMilliseconds            *int
 }
 
@@ -182,13 +187,14 @@ type SSOSettings struct {
 }
 
 type SqlSettings struct {
-	DriverName         string
-	DataSource         string
-	DataSourceReplicas []string
-	MaxIdleConns       int
-	MaxOpenConns       int
-	Trace              bool
-	AtRestEncryptKey   string
+	DriverName               string
+	DataSource               string
+	DataSourceReplicas       []string
+	DataSourceSearchReplicas []string
+	MaxIdleConns             int
+	MaxOpenConns             int
+	Trace                    bool
+	AtRestEncryptKey         string
 }
 
 type LogSettings struct {
@@ -211,6 +217,7 @@ type PasswordSettings struct {
 }
 
 type FileSettings struct {
+	EnableFileAttachments   *bool
 	MaxFileSize             *int64
 	DriverName              string
 	Directory               string
@@ -246,7 +253,6 @@ type EmailSettings struct {
 	SMTPPort                          string
 	ConnectionSecurity                string
 	InviteSalt                        string
-	PasswordResetSalt                 string
 	SendPushNotifications             *bool
 	PushNotificationServer            *string
 	PushNotificationContents          *string
@@ -271,12 +277,15 @@ type PrivacySettings struct {
 }
 
 type SupportSettings struct {
-	TermsOfServiceLink *string
-	PrivacyPolicyLink  *string
-	AboutLink          *string
-	HelpLink           *string
-	ReportAProblemLink *string
-	SupportEmail       *string
+	TermsOfServiceLink       *string
+	PrivacyPolicyLink        *string
+	AboutLink                *string
+	HelpLink                 *string
+	ReportAProblemLink       *string
+	AdministratorsGuideLink  *string
+	TroubleshootingForumLink *string
+	CommercialSupportLink    *string
+	SupportEmail             *string
 }
 
 type TeamSettings struct {
@@ -471,6 +480,11 @@ func (o *Config) SetDefaults() {
 		*o.FileSettings.AmazonS3SSL = true // Secure by default.
 	}
 
+	if o.FileSettings.EnableFileAttachments == nil {
+		o.FileSettings.EnableFileAttachments = new(bool)
+		*o.FileSettings.EnableFileAttachments = true
+	}
+
 	if o.FileSettings.MaxFileSize == nil {
 		o.FileSettings.MaxFileSize = new(int64)
 		*o.FileSettings.MaxFileSize = 52428800 // 50 MB
@@ -486,12 +500,12 @@ func (o *Config) SetDefaults() {
 		o.FileSettings.InitialFont = "luximbi.ttf"
 	}
 
-	if len(o.EmailSettings.InviteSalt) == 0 {
-		o.EmailSettings.InviteSalt = NewRandomString(32)
+	if o.FileSettings.Directory == "" {
+		o.FileSettings.Directory = "./data/"
 	}
 
-	if len(o.EmailSettings.PasswordResetSalt) == 0 {
-		o.EmailSettings.PasswordResetSalt = NewRandomString(32)
+	if len(o.EmailSettings.InviteSalt) == 0 {
+		o.EmailSettings.InviteSalt = NewRandomString(32)
 	}
 
 	if o.ServiceSettings.SiteURL == nil {
@@ -601,13 +615,21 @@ func (o *Config) SetDefaults() {
 	if o.TeamSettings.RestrictPublicChannelCreation == nil {
 		o.TeamSettings.RestrictPublicChannelCreation = new(string)
 		// If this setting does not exist, assume migration from <3.6, so use management setting as default.
-		*o.TeamSettings.RestrictPublicChannelCreation = *o.TeamSettings.RestrictPublicChannelManagement
+		if *o.TeamSettings.RestrictPublicChannelManagement == PERMISSIONS_CHANNEL_ADMIN {
+			*o.TeamSettings.RestrictPublicChannelCreation = PERMISSIONS_TEAM_ADMIN
+		} else {
+			*o.TeamSettings.RestrictPublicChannelCreation = *o.TeamSettings.RestrictPublicChannelManagement
+		}
 	}
 
 	if o.TeamSettings.RestrictPrivateChannelCreation == nil {
 		o.TeamSettings.RestrictPrivateChannelCreation = new(string)
 		// If this setting does not exist, assume migration from <3.6, so use management setting as default.
-		*o.TeamSettings.RestrictPrivateChannelCreation = *o.TeamSettings.RestrictPrivateChannelManagement
+		if *o.TeamSettings.RestrictPrivateChannelManagement == PERMISSIONS_CHANNEL_ADMIN {
+			*o.TeamSettings.RestrictPrivateChannelCreation = PERMISSIONS_TEAM_ADMIN
+		} else {
+			*o.TeamSettings.RestrictPrivateChannelCreation = *o.TeamSettings.RestrictPrivateChannelManagement
+		}
 	}
 
 	if o.TeamSettings.RestrictPublicChannelDeletion == nil {
@@ -698,7 +720,7 @@ func (o *Config) SetDefaults() {
 	}
 
 	if !IsSafeLink(o.SupportSettings.TermsOfServiceLink) {
-		*o.SupportSettings.TermsOfServiceLink = ""
+		*o.SupportSettings.TermsOfServiceLink = SUPPORT_SETTINGS_DEFAULT_TERMS_OF_SERVICE_LINK
 	}
 
 	if o.SupportSettings.TermsOfServiceLink == nil {
@@ -740,6 +762,33 @@ func (o *Config) SetDefaults() {
 	if o.SupportSettings.ReportAProblemLink == nil {
 		o.SupportSettings.ReportAProblemLink = new(string)
 		*o.SupportSettings.ReportAProblemLink = SUPPORT_SETTINGS_DEFAULT_REPORT_A_PROBLEM_LINK
+	}
+
+	if !IsSafeLink(o.SupportSettings.AdministratorsGuideLink) {
+		*o.SupportSettings.AdministratorsGuideLink = ""
+	}
+
+	if o.SupportSettings.AdministratorsGuideLink == nil {
+		o.SupportSettings.AdministratorsGuideLink = new(string)
+		*o.SupportSettings.AdministratorsGuideLink = SUPPORT_SETTINGS_DEFAULT_ADMINISTRATORS_GUIDE_LINK
+	}
+
+	if !IsSafeLink(o.SupportSettings.TroubleshootingForumLink) {
+		*o.SupportSettings.TroubleshootingForumLink = ""
+	}
+
+	if o.SupportSettings.TroubleshootingForumLink == nil {
+		o.SupportSettings.TroubleshootingForumLink = new(string)
+		*o.SupportSettings.TroubleshootingForumLink = SUPPORT_SETTINGS_DEFAULT_TROUBLESHOOTING_FORUM_LINK
+	}
+
+	if !IsSafeLink(o.SupportSettings.CommercialSupportLink) {
+		*o.SupportSettings.CommercialSupportLink = ""
+	}
+
+	if o.SupportSettings.CommercialSupportLink == nil {
+		o.SupportSettings.CommercialSupportLink = new(string)
+		*o.SupportSettings.CommercialSupportLink = SUPPORT_SETTINGS_DEFAULT_COMMERCIAL_SUPPORT_LINK
 	}
 
 	if o.SupportSettings.SupportEmail == nil {
@@ -995,12 +1044,12 @@ func (o *Config) SetDefaults() {
 
 	if o.SamlSettings.Verify == nil {
 		o.SamlSettings.Verify = new(bool)
-		*o.SamlSettings.Verify = false
+		*o.SamlSettings.Verify = true
 	}
 
 	if o.SamlSettings.Encrypt == nil {
 		o.SamlSettings.Encrypt = new(bool)
-		*o.SamlSettings.Encrypt = false
+		*o.SamlSettings.Encrypt = true
 	}
 
 	if o.SamlSettings.IdpUrl == nil {
@@ -1148,9 +1197,19 @@ func (o *Config) SetDefaults() {
 		*o.ServiceSettings.TimeBetweenUserTypingUpdatesMilliseconds = 5000
 	}
 
+	if o.ServiceSettings.EnablePostSearch == nil {
+		o.ServiceSettings.EnablePostSearch = new(bool)
+		*o.ServiceSettings.EnablePostSearch = true
+	}
+
 	if o.ServiceSettings.EnableUserTypingMessages == nil {
 		o.ServiceSettings.EnableUserTypingMessages = new(bool)
 		*o.ServiceSettings.EnableUserTypingMessages = true
+	}
+
+	if o.ServiceSettings.EnableUserStatuses == nil {
+		o.ServiceSettings.EnableUserStatuses = new(bool)
+		*o.ServiceSettings.EnableUserStatuses = true
 	}
 
 	if o.ServiceSettings.ClusterLogTimeoutMilliseconds == nil {
@@ -1263,10 +1322,6 @@ func (o *Config) IsValid() *AppError {
 
 	if len(o.EmailSettings.InviteSalt) < 32 {
 		return NewLocAppError("Config.IsValid", "model.config.is_valid.email_salt.app_error", nil, "")
-	}
-
-	if len(o.EmailSettings.PasswordResetSalt) < 32 {
-		return NewLocAppError("Config.IsValid", "model.config.is_valid.email_reset_salt.app_error", nil, "")
 	}
 
 	if *o.EmailSettings.EmailBatchingBufferSize <= 0 {
@@ -1415,7 +1470,6 @@ func (o *Config) Sanitize() {
 	}
 
 	o.EmailSettings.InviteSalt = FAKE_SETTING
-	o.EmailSettings.PasswordResetSalt = FAKE_SETTING
 	if len(o.EmailSettings.SMTPPassword) > 0 {
 		o.EmailSettings.SMTPPassword = FAKE_SETTING
 	}
@@ -1429,6 +1483,10 @@ func (o *Config) Sanitize() {
 
 	for i := range o.SqlSettings.DataSourceReplicas {
 		o.SqlSettings.DataSourceReplicas[i] = FAKE_SETTING
+	}
+
+	for i := range o.SqlSettings.DataSourceSearchReplicas {
+		o.SqlSettings.DataSourceSearchReplicas[i] = FAKE_SETTING
 	}
 }
 

@@ -4,10 +4,11 @@
 package app
 
 import (
+	"net/http"
+
 	"github.com/mattermost/platform/einterfaces"
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/utils"
-	"net/http"
 
 	l4g "github.com/alecthomas/log4go"
 )
@@ -47,8 +48,8 @@ func GetSession(token string) (*model.Session, *model.AppError) {
 		} else {
 			session = sessionResult.Data.(*model.Session)
 
-			if session.IsExpired() || session.Token != token {
-				return nil, model.NewLocAppError("GetSession", "api.context.invalid_token.error", map[string]interface{}{"Token": token, "Error": sessionResult.Err.DetailedError}, "")
+			if session == nil || session.IsExpired() || session.Token != token {
+				return nil, model.NewLocAppError("GetSession", "api.context.invalid_token.error", map[string]interface{}{"Token": token, "Error": ""}, "")
 			} else {
 				AddSessionToCache(session)
 				return session, nil
@@ -179,4 +180,18 @@ func AttachDeviceId(sessionId string, deviceId string, expiresAt int64) *model.A
 	}
 
 	return nil
+}
+
+func UpdateLastActivityAtIfNeeded(session model.Session) {
+	now := model.GetMillis()
+	if now-session.LastActivityAt < model.SESSION_ACTIVITY_TIMEOUT {
+		return
+	}
+
+	if result := <-Srv.Store.Session().UpdateLastActivityAt(session.Id, now); result.Err != nil {
+		l4g.Error(utils.T("api.status.last_activity.error", session.UserId, session.Id))
+	}
+
+	session.LastActivityAt = now
+	AddSessionToCache(&session)
 }

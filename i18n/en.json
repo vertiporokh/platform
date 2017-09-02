@@ -49,23 +49,23 @@
   },
   {
     "id": "api.admin.add_certificate.no_file.app_error",
-    "translation": "No file under 'certificate' in request"
+    "translation": "No file under 'certificate' in request."
   },
   {
     "id": "api.admin.add_certificate.open.app_error",
-    "translation": "Could not open certificate file"
+    "translation": "Could not open certificate file."
   },
   {
     "id": "api.admin.add_certificate.saving.app_error",
-    "translation": "Could not save certificate file"
+    "translation": "Could not save certificate file."
   },
   {
     "id": "api.admin.file_read_error",
-    "translation": "Error reading log file"
+    "translation": "Error reading log file."
   },
   {
     "id": "api.admin.get_brand_image.not_available.app_error",
-    "translation": "Custom branding is not configured or supported on this server"
+    "translation": "Custom branding is not configured or supported on this server."
   },
   {
     "id": "api.admin.get_brand_image.storage.app_error",
@@ -73,15 +73,15 @@
   },
   {
     "id": "api.admin.init.debug",
-    "translation": "Initializing admin API routes"
+    "translation": "Initializing admin API routes."
   },
   {
     "id": "api.admin.recycle_db_end.warn",
-    "translation": "Finished recycling the database connection"
+    "translation": "Finished recycling the database connection."
   },
   {
     "id": "api.admin.recycle_db_start.warn",
-    "translation": "Attempting to recycle the database connection"
+    "translation": "Attempting to recycle the database connection."
   },
   {
     "id": "api.admin.remove_certificate.delete.app_error",
@@ -89,7 +89,7 @@
   },
   {
     "id": "api.admin.saml.metadata.app_error",
-    "translation": "An error occurred while building Service Provider Metadata"
+    "translation": "An error occurred while building Service Provider Metadata."
   },
   {
     "id": "api.admin.test_email.body",
@@ -442,10 +442,6 @@
   {
     "id": "api.command.init.debug",
     "translation": "Initializing command API routes"
-  },
-  {
-    "id": "api.emoji.init.debug",
-    "translation": "Initializing emoji API routes"
   },
   {
     "id": "api.command.invite_people.desc",
@@ -1006,6 +1002,10 @@
     "translation": "Initializing emoji API routes"
   },
   {
+    "id": "api.emoji.init.debug",
+    "translation": "Initializing emoji API routes"
+  },
+  {
     "id": "api.emoji.storage.app_error",
     "translation": "File storage not configured properly. Please configure for either S3 or local server file storage."
   },
@@ -1030,6 +1030,10 @@
     "translation": "Unable to create emoji. An error occurred when trying to encode the GIF image."
   },
   {
+    "id": "api.file.attachments.disabled.app_error",
+    "translation": "File attachments have been disabled on this server."
+  },
+  {
     "id": "api.file.get_file.public_disabled.app_error",
     "translation": "Public links have been disabled by the system administrator"
   },
@@ -1051,7 +1055,7 @@
   },
   {
     "id": "api.file.get_info_for_request.storage.app_error",
-    "translation": "Unable to get info for file. Image storage is not configured."
+    "translation": "Unable to get info for file. File storage is not configured."
   },
   {
     "id": "api.file.get_public_file_old.storage.app_error",
@@ -1688,10 +1692,6 @@
     "translation": "Unable to set preferences for other user"
   },
   {
-    "id": "api.preference.save_preferences.set_details.app_error",
-    "translation": "session.user_id={{.SessionUserId}}, preference.user_id={{.PreferenceUserId}}"
-  },
-  {
     "id": "api.reaction.delete_reaction.mismatched_channel_id.app_error",
     "translation": "Failed to delete reaction because channel ID does not match post ID in the URL"
   },
@@ -1700,12 +1700,24 @@
     "translation": "Initializing reactions api routes"
   },
   {
+    "id": "api.opengraph.init.debug",
+    "translation": "Initializing open graph protocol api routes"
+  },
+  {
     "id": "api.reaction.list_reactions.mismatched_channel_id.app_error",
     "translation": "Failed to get reactions because channel ID does not match post ID in the URL"
   },
   {
+    "id": "api.reaction.save_reaction.invalid.app_error",
+    "translation": "Reaction is not valid."
+  },
+  {
     "id": "api.reaction.save_reaction.mismatched_channel_id.app_error",
     "translation": "Failed to save reaction because channel ID does not match post ID in the URL"
+  },
+  {
+    "id": "api.reaction.save_reaction.user_id.app_error",
+    "translation": "You cannot save reaction for the other user."
   },
   {
     "id": "api.reaction.send_reaction_event.post.app_error",
@@ -2265,7 +2277,7 @@
   },
   {
     "id": "api.templates.signin_change_email.subject",
-    "translation": "[{{ .SiteName }}] You updated your sign-in method on {{ .SiteName }}"
+    "translation": "[{{ .SiteName }}] Your sign-in method has been updated"
   },
   {
     "id": "api.templates.signup_team_body.button",
@@ -2468,6 +2480,14 @@
     "translation": "User sign-up with email is disabled."
   },
   {
+    "id": "api.user.create_user.missing_invite_id.app_error",
+    "translation": "Missing Invite Id."
+  },
+  {
+    "id": "api.user.create_user.missing_hash_or_data.app_error",
+    "translation": "Missing Hash or URL query data."
+  },
+  {
     "id": "api.user.create_user.signup_link_expired.app_error",
     "translation": "The signup link has expired"
   },
@@ -2521,7 +2541,7 @@
   },
   {
     "id": "api.user.login.inactive.app_error",
-    "translation": "Login failed because your account has been set to inactive.  Please contact an administrator."
+    "translation": "Login failed because your account has been deactivated.  Please contact an administrator."
   },
   {
     "id": "api.user.login.invalid_credentials",
@@ -2957,7 +2977,7 @@
   },
   {
     "id": "app.import.validate_channel_import_data.create_at_zero.error",
-    "translation": "Channel create_at must not be 0 if provided."
+    "translation": "Channel create_at must not be zero if provided."
   },
   {
     "id": "app.import.validate_channel_import_data.display_name_length.error",
@@ -2965,7 +2985,7 @@
   },
   {
     "id": "app.import.validate_channel_import_data.display_name_missing.error",
-    "translation": "Missing required channel property: display_name."
+    "translation": "Missing required channel property: display_name"
   },
   {
     "id": "app.import.validate_channel_import_data.header_length.error",
@@ -3009,7 +3029,7 @@
   },
   {
     "id": "app.import.validate_post_import_data.create_at_zero.error",
-    "translation": "Post CreateAt must not be zero if it is provided."
+    "translation": "Post CreateAt property must not be zero if provided."
   },
   {
     "id": "app.import.validate_post_import_data.message_length.error",
@@ -3033,7 +3053,7 @@
   },
   {
     "id": "app.import.validate_team_import_data.create_at_zero.error",
-    "translation": "Team create_at must not be 0 if provided."
+    "translation": "Team create_at must not be zero if provided."
   },
   {
     "id": "app.import.validate_team_import_data.description_length.error",
@@ -3045,7 +3065,7 @@
   },
   {
     "id": "app.import.validate_team_import_data.display_name_missing.error",
-    "translation": "Missing required team property: display_name"
+    "translation": "Missing required team property: display_name."
   },
   {
     "id": "app.import.validate_team_import_data.name_characters.error",
@@ -3061,7 +3081,7 @@
   },
   {
     "id": "app.import.validate_team_import_data.name_reserved.error",
-    "translation": "Team name contains reserved word."
+    "translation": "Team name contains reserved words."
   },
   {
     "id": "app.import.validate_team_import_data.type_invalid.error",
@@ -3069,7 +3089,7 @@
   },
   {
     "id": "app.import.validate_team_import_data.type_missing.error",
-    "translation": "Missing required team property: type"
+    "translation": "Missing required team property: type."
   },
   {
     "id": "app.import.validate_user_channels_import_data.channel_name_missing.error",
@@ -3086,6 +3106,10 @@
   {
     "id": "app.import.validate_user_channels_import_data.invalid_roles.error",
     "translation": "Invalid roles for User's Channel Membership."
+  },
+  {
+    "id": "app.import.validate_user_import_data.auth_data_and_password.error",
+    "translation": "User AuthData and Password are mutually exclusive."
   },
   {
     "id": "app.import.validate_user_import_data.auth_data_length.error",
@@ -3114,6 +3138,10 @@
   {
     "id": "app.import.validate_user_import_data.nickname_length.error",
     "translation": "User nickname is too long."
+  },
+  {
+    "id": "app.import.validate_user_import_data.pasword_length.error",
+    "translation": "User Password has invalid length."
   },
   {
     "id": "app.import.validate_user_import_data.position_length.error",
@@ -3612,6 +3640,10 @@
     "translation": "Invalid redirect uri"
   },
   {
+    "id": "model.authorize.is_valid.response_type.app_error",
+    "translation": "Invalid response type"
+  },
+  {
     "id": "model.authorize.is_valid.scope.app_error",
     "translation": "Invalid scope"
   },
@@ -3961,7 +3993,7 @@
   },
   {
     "id": "model.config.is_valid.max_file_size.app_error",
-    "translation": "Invalid max file size for file settings. Must be a zero or positive number."
+    "translation": "Invalid max file size for file settings. Must be a whole number greater than zero."
   },
   {
     "id": "model.config.is_valid.max_notify_per_channel.app_error",
@@ -4400,6 +4432,14 @@
     "translation": "Invalid user id"
   },
   {
+    "id": "model.token.is_valid.expiry",
+    "translation": "Invalid token expiry"
+  },
+  {
+    "id": "model.token.is_valid.size",
+    "translation": "Invalid token."
+  },
+  {
     "id": "model.user.is_valid.auth_data.app_error",
     "translation": "Invalid auth data"
   },
@@ -4434,6 +4474,10 @@
   {
     "id": "model.user.is_valid.nickname.app_error",
     "translation": "Invalid nickname"
+  },
+  {
+    "id": "model.user.is_valid.password_limit.app_error",
+    "translation": "Unable to set a password over 72 characters due to the limitations of bcrypt."
   },
   {
     "id": "model.user.is_valid.position.app_error",
@@ -4582,10 +4626,6 @@
   {
     "id": "store.sql.dialect_driver.panic",
     "translation": "Failed to create dialect specific driver %v"
-  },
-  {
-    "id": "store.sql.drop_column.critical",
-    "translation": "Failed to drop column %v"
   },
   {
     "id": "store.sql.incorrect_mac",
@@ -5198,6 +5238,10 @@
   {
     "id": "store.sql_post.save.existing.app_error",
     "translation": "You cannot update an existing Post"
+  },
+  {
+    "id": "store.sql_post.search.disabled",
+    "translation": "Searching has been disabled on this server. Please contact your System Administrator."
   },
   {
     "id": "store.sql_post.search.warn",
@@ -5871,6 +5915,10 @@
     "id": "utils.mail.connect_smtp.open_tls.app_error",
     "translation": "Failed to open TLS connection"
   },
+    {
+    "id": "utils.mail.connect_smtp.helo.app_error",
+    "translation": "Failed to set HELO"
+  },
   {
     "id": "utils.mail.new_client.auth.app_error",
     "translation": "Failed to authenticate on SMTP server"
@@ -5878,6 +5926,10 @@
   {
     "id": "utils.mail.new_client.open.error",
     "translation": "Failed to open a connection to SMTP server %v"
+  },
+  {
+    "id": "utils.mail.new_client.helo.error",
+    "translation": "Failed to to set the HELO to SMTP server %v"
   },
   {
     "id": "utils.mail.send_mail.close.app_error",

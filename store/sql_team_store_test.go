@@ -138,7 +138,8 @@ func TestTeamStoreSearchByName(t *testing.T) {
 
 	o1 := model.Team{}
 	o1.DisplayName = "DisplayName"
-	o1.Name = "zzz" + model.NewId() + "b"
+	var name = "zzz" + model.NewId()
+	o1.Name = name + "b"
 	o1.Email = model.NewId() + "@nowhere.com"
 	o1.Type = model.TEAM_OPEN
 
@@ -146,12 +147,10 @@ func TestTeamStoreSearchByName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if r1 := <-store.Team().SearchByName(o1.Name); r1.Err != nil {
+	if r1 := <-store.Team().SearchByName(name); r1.Err != nil {
 		t.Fatal(r1.Err)
 	} else {
 		if r1.Data.([]*model.Team)[0].ToJson() != o1.ToJson() {
-			t.Log(r1.Data.([]*model.Team)[0].ToJson())
-			t.Log(o1.ToJson())
 			t.Fatal("invalid returned team")
 		}
 	}

@@ -8,7 +8,7 @@
     position: fixed;
     right: 0;
     width: 400px;
-    z-index: 6;
+    z-index: 8;
 
     &.webrtc {
         z-index: 5;
@@ -42,6 +42,16 @@
     }
 
     .post {
+        &.post--compact {
+            .post__pinned-badge {
+                margin: 0 0 0 5px;
+            }
+        }
+
+        .post__img {
+            width: 43px;
+        }
+
         .post__content {
             padding: 0 10px 0 0;
         }

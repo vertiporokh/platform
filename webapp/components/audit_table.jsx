@@ -110,11 +110,11 @@ const holders = defineMessages({
     },
     accountActive: {
         id: 'audit_table.accountActive',
-        defaultMessage: 'Account made active'
+        defaultMessage: 'Account activated'
     },
     accountInactive: {
         id: 'audit_table.accountInactive',
-        defaultMessage: 'Account made inactive'
+        defaultMessage: 'Account deactivated'
     },
     by: {
         id: 'audit_table.by',
@@ -378,7 +378,10 @@ export function formatAuditInfo(audit, formatMessage) {
 
                 if (userIdField.indexOf('user_id') >= 0) {
                     userId = userIdField[userIdField.indexOf('user_id') + 1];
-                    username = UserStore.getProfile(userId).username;
+                    var profile = UserStore.getProfile(userId);
+                    if (profile) {
+                        username = profile.username;
+                    }
                 }
             }
 

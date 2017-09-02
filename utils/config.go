@@ -37,6 +37,7 @@ var CfgDiagnosticId = ""
 var CfgHash = ""
 var ClientCfgHash = ""
 var CfgFileName string = ""
+var CfgDisableConfigWatch = false
 var ClientCfg map[string]string = map[string]string{}
 var originalDisableDebugLvl l4g.Level = l4g.DEBUG
 var siteURL = ""
@@ -179,6 +180,10 @@ func InitializeConfigWatch() {
 	cfgMutex.Lock()
 	defer cfgMutex.Unlock()
 
+	if CfgDisableConfigWatch {
+		return
+	}
+
 	if watcher == nil {
 		var err error
 		watcher, err = fsnotify.NewWatcher()
@@ -216,11 +221,13 @@ func EnableConfigWatch() {
 	cfgMutex.Lock()
 	defer cfgMutex.Unlock()
 
-	configFile := filepath.Clean(CfgFileName)
-	configDir, _ := filepath.Split(configFile)
-
 	if watcher != nil {
-		watcher.Add(configDir)
+		configFile := filepath.Clean(CfgFileName)
+		configDir, _ := filepath.Split(configFile)
+
+		if watcher != nil {
+			watcher.Add(configDir)
+		}
 	}
 }
 
@@ -281,7 +288,7 @@ func LoadConfig(fileName string) {
 	CfgFileName = viper.ConfigFileUsed()
 
 	needSave := len(config.SqlSettings.AtRestEncryptKey) == 0 || len(*config.FileSettings.PublicLinkSalt) == 0 ||
-		len(config.EmailSettings.InviteSalt) == 0 || len(config.EmailSettings.PasswordResetSalt) == 0
+		len(config.EmailSettings.InviteSalt) == 0
 
 	config.SetDefaults()
 
@@ -396,8 +403,12 @@ func getClientConfig(c *model.Config) map[string]string {
 	props["AboutLink"] = *c.SupportSettings.AboutLink
 	props["HelpLink"] = *c.SupportSettings.HelpLink
 	props["ReportAProblemLink"] = *c.SupportSettings.ReportAProblemLink
+	props["AdministratorsGuideLink"] = *c.SupportSettings.AdministratorsGuideLink
+	props["TroubleshootingForumLink"] = *c.SupportSettings.TroubleshootingForumLink
+	props["CommercialSupportLink"] = *c.SupportSettings.CommercialSupportLink
 	props["SupportEmail"] = *c.SupportSettings.SupportEmail
 
+	props["EnableFileAttachments"] = strconv.FormatBool(*c.FileSettings.EnableFileAttachments)
 	props["EnablePublicLink"] = strconv.FormatBool(c.FileSettings.EnablePublicLink)
 	props["ProfileHeight"] = fmt.Sprintf("%v", c.FileSettings.ProfileHeight)
 	props["ProfileWidth"] = fmt.Sprintf("%v", c.FileSettings.ProfileWidth)
@@ -534,9 +545,6 @@ func Desanitize(cfg *model.Config) {
 	if cfg.EmailSettings.InviteSalt == model.FAKE_SETTING {
 		cfg.EmailSettings.InviteSalt = Cfg.EmailSettings.InviteSalt
 	}
-	if cfg.EmailSettings.PasswordResetSalt == model.FAKE_SETTING {
-		cfg.EmailSettings.PasswordResetSalt = Cfg.EmailSettings.PasswordResetSalt
-	}
 	if cfg.EmailSettings.SMTPPassword == model.FAKE_SETTING {
 		cfg.EmailSettings.SMTPPassword = Cfg.EmailSettings.SMTPPassword
 	}
@@ -554,5 +562,9 @@ func Desanitize(cfg *model.Config) {
 
 	for i := range cfg.SqlSettings.DataSourceReplicas {
 		cfg.SqlSettings.DataSourceReplicas[i] = Cfg.SqlSettings.DataSourceReplicas[i]
+	}
+
+	for i := range cfg.SqlSettings.DataSourceSearchReplicas {
+		cfg.SqlSettings.DataSourceSearchReplicas[i] = Cfg.SqlSettings.DataSourceSearchReplicas[i]
 	}
 }

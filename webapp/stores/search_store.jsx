@@ -122,7 +122,7 @@ class SearchStoreClass extends EventEmitter {
 
     togglePinPost(postId, isPinned) {
         const results = this.getSearchResults();
-        if (results == null) {
+        if (results == null || results.posts == null) {
             return;
         }
 
@@ -131,6 +131,19 @@ class SearchStoreClass extends EventEmitter {
             results.posts[postId] = Object.assign({}, post, {
                 is_pinned: isPinned
             });
+        }
+    }
+
+    removePost(post) {
+        const results = this.getSearchResults();
+        if (results == null) {
+            return;
+        }
+
+        const index = results.order.indexOf(post.id);
+        if (index > -1) {
+            delete results.posts[post.id];
+            results.order.splice(index, 1);
         }
     }
 }
@@ -169,6 +182,10 @@ SearchStore.dispatchToken = AppDispatcher.register((payload) => {
         break;
     case ActionTypes.RECEIVED_POST_UNPINNED:
         SearchStore.togglePinPost(action.reaction, false);
+        SearchStore.emitSearchChange();
+        break;
+    case ActionTypes.REMOVE_POST:
+        SearchStore.removePost(action.post);
         SearchStore.emitSearchChange();
         break;
     default:

@@ -6,6 +6,7 @@ package api4
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -226,14 +227,14 @@ func (c *Context) LogError(err *model.AppError) {
 	if c.Path == "/api/v3/users/websocket" && err.StatusCode == 401 || err.Id == "web.check_browser_compatibility.app_error" {
 		c.LogDebug(err)
 	} else {
-		l4g.Error(utils.T("api.context.log.error"), c.Path, err.Where, err.StatusCode,
-			c.RequestId, c.Session.UserId, c.IpAddress, err.SystemMessage(utils.T), err.DetailedError)
+		l4g.Error(utils.TDefault("api.context.log.error"), c.Path, err.Where, err.StatusCode,
+			c.RequestId, c.Session.UserId, c.IpAddress, err.SystemMessage(utils.TDefault), err.DetailedError)
 	}
 }
 
 func (c *Context) LogDebug(err *model.AppError) {
-	l4g.Debug(utils.T("api.context.log.error"), c.Path, err.Where, err.StatusCode,
-		c.RequestId, c.Session.UserId, c.IpAddress, err.SystemMessage(utils.T), err.DetailedError)
+	l4g.Debug(utils.TDefault("api.context.log.error"), c.Path, err.Where, err.StatusCode,
+		c.RequestId, c.Session.UserId, c.IpAddress, err.SystemMessage(utils.TDefault), err.DetailedError)
 }
 
 func (c *Context) IsSystemAdmin() bool {
@@ -270,9 +271,13 @@ func (c *Context) MfaRequired() {
 			return
 		}
 
+		// Special case to let user get themself
+		if c.Path == "/api/v4/users/me" {
+			return
+		}
+
 		if !user.MfaActive {
-			c.Err = model.NewLocAppError("", "api.context.mfa_required.app_error", nil, "MfaRequired")
-			c.Err.StatusCode = http.StatusUnauthorized
+			c.Err = model.NewAppError("", "api.context.mfa_required.app_error", nil, "MfaRequired", http.StatusForbidden)
 			return
 		}
 	}
@@ -382,6 +387,17 @@ func (c *Context) RequirePostId() *Context {
 	return c
 }
 
+func (c *Context) RequireAppId() *Context {
+	if c.Err != nil {
+		return c
+	}
+
+	if len(c.Params.AppId) != 26 {
+		c.SetInvalidUrlParam("app_id")
+	}
+	return c
+}
+
 func (c *Context) RequireFileId() *Context {
 	if c.Err != nil {
 		return c
@@ -401,6 +417,17 @@ func (c *Context) RequireReportId() *Context {
 
 	if len(c.Params.ReportId) != 26 {
 		c.SetInvalidUrlParam("report_id")
+	}
+	return c
+}
+
+func (c *Context) RequireEmojiId() *Context {
+	if c.Err != nil {
+		return c
+	}
+
+	if len(c.Params.EmojiId) != 26 {
+		c.SetInvalidUrlParam("emoji_id")
 	}
 	return c
 }
@@ -446,8 +473,20 @@ func (c *Context) RequireCategory() *Context {
 		return c
 	}
 
-	if !model.IsValidAlphaNum(c.Params.Category, true) {
+	if !model.IsValidAlphaNumHyphenUnderscore(c.Params.Category, true) {
 		c.SetInvalidUrlParam("category")
+	}
+
+	return c
+}
+
+func (c *Context) RequireService() *Context {
+	if c.Err != nil {
+		return c
+	}
+
+	if len(c.Params.Service) == 0 {
+		c.SetInvalidUrlParam("service")
 	}
 
 	return c
@@ -458,8 +497,22 @@ func (c *Context) RequirePreferenceName() *Context {
 		return c
 	}
 
-	if !model.IsValidAlphaNum(c.Params.PreferenceName, true) {
+	if !model.IsValidAlphaNumHyphenUnderscore(c.Params.PreferenceName, true) {
 		c.SetInvalidUrlParam("preference_name")
+	}
+
+	return c
+}
+
+func (c *Context) RequireEmojiName() *Context {
+	if c.Err != nil {
+		return c
+	}
+
+	validName := regexp.MustCompile(`^[a-zA-Z0-9\-\+_]+$`)
+
+	if len(c.Params.EmojiName) == 0 || len(c.Params.EmojiName) > 64 || !validName.MatchString(c.Params.EmojiName) {
+		c.SetInvalidUrlParam("emoji_name")
 	}
 
 	return c

@@ -65,17 +65,12 @@ func saveReaction(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if result := <-app.Srv.Store.Reaction().Save(reaction); result.Err != nil {
-		c.Err = result.Err
+	if reaction, err := app.SaveReactionForPost(reaction); err != nil {
+		c.Err = err
 		return
 	} else {
-		go sendReactionEvent(model.WEBSOCKET_EVENT_REACTION_ADDED, channelId, reaction, post)
-
-		reaction := result.Data.(*model.Reaction)
-
-		app.InvalidateCacheForReactions(reaction.PostId)
-
 		w.Write([]byte(reaction.ToJson()))
+		return
 	}
 }
 
@@ -111,28 +106,13 @@ func deleteReaction(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var post *model.Post
-
-	if result := <-app.Srv.Store.Post().Get(reaction.PostId); result.Err != nil {
-		c.Err = result.Err
-		return
-	} else if post = result.Data.(*model.PostList).Posts[postId]; post.ChannelId != channelId {
-		c.Err = model.NewLocAppError("deleteReaction", "api.reaction.delete_reaction.mismatched_channel_id.app_error",
-			nil, "channelId="+channelId+", post.ChannelId="+post.ChannelId+", postId="+postId)
-		c.Err.StatusCode = http.StatusBadRequest
+	err := app.DeleteReactionForPost(reaction)
+	if err != nil {
+		c.Err = err
 		return
 	}
 
-	if result := <-app.Srv.Store.Reaction().Delete(reaction); result.Err != nil {
-		c.Err = result.Err
-		return
-	} else {
-		go sendReactionEvent(model.WEBSOCKET_EVENT_REACTION_REMOVED, channelId, reaction, post)
-
-		app.InvalidateCacheForReactions(reaction.PostId)
-
-		ReturnStatusOK(w)
-	}
+	ReturnStatusOK(w)
 }
 
 func sendReactionEvent(event string, channelId string, reaction *model.Reaction, post *model.Post) {

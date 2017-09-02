@@ -6,6 +6,7 @@ package api4
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 	"sort"
 	"strconv"
 	"testing"
@@ -367,6 +368,78 @@ func TestCreateDirectChannel(t *testing.T) {
 	CheckNoError(t, resp)
 }
 
+func TestCreateGroupChannel(t *testing.T) {
+	th := Setup().InitBasic().InitSystemAdmin()
+	defer TearDown()
+	Client := th.Client
+	user := th.BasicUser
+	user2 := th.BasicUser2
+	user3 := th.CreateUser()
+
+	userIds := []string{user.Id, user2.Id, user3.Id}
+
+	rgc, resp := Client.CreateGroupChannel(userIds)
+	CheckNoError(t, resp)
+	CheckCreatedStatus(t, resp)
+
+	if rgc == nil {
+		t.Fatal("should have created a group channel")
+	}
+
+	if rgc.Type != model.CHANNEL_GROUP {
+		t.Fatal("should have created a channel of group type")
+	}
+
+	m, _ := app.GetChannelMembersPage(rgc.Id, 0, 10)
+	if len(*m) != 3 {
+		t.Fatal("should have 3 channel members")
+	}
+
+	// saving duplicate group channel
+	rgc2, resp := Client.CreateGroupChannel([]string{user3.Id, user2.Id})
+	CheckNoError(t, resp)
+
+	if rgc.Id != rgc2.Id {
+		t.Fatal("should have returned existing channel")
+	}
+
+	m2, _ := app.GetChannelMembersPage(rgc2.Id, 0, 10)
+	if !reflect.DeepEqual(*m, *m2) {
+		t.Fatal("should be equal")
+	}
+
+	rgc, resp = Client.CreateGroupChannel([]string{user2.Id})
+	CheckBadRequestStatus(t, resp)
+
+	user4 := th.CreateUser()
+	user5 := th.CreateUser()
+	user6 := th.CreateUser()
+	user7 := th.CreateUser()
+	user8 := th.CreateUser()
+	user9 := th.CreateUser()
+
+	rgc, resp = Client.CreateGroupChannel([]string{user.Id, user2.Id, user3.Id, user4.Id, user5.Id, user6.Id, user7.Id, user8.Id, user9.Id})
+	CheckBadRequestStatus(t, resp)
+
+	if rgc != nil {
+		t.Fatal("should return nil")
+	}
+
+	_, resp = Client.CreateGroupChannel([]string{user.Id, user2.Id, user3.Id, GenerateTestId()})
+	CheckBadRequestStatus(t, resp)
+
+	_, resp = Client.CreateGroupChannel([]string{user.Id, user2.Id, user3.Id, "junk"})
+	CheckBadRequestStatus(t, resp)
+
+	Client.Logout()
+
+	_, resp = Client.CreateGroupChannel(userIds)
+	CheckUnauthorizedStatus(t, resp)
+
+	_, resp = th.SystemAdminClient.CreateGroupChannel(userIds)
+	CheckNoError(t, resp)
+}
+
 func TestGetChannel(t *testing.T) {
 	th := Setup().InitBasic().InitSystemAdmin()
 	defer TearDown()
@@ -416,6 +489,55 @@ func TestGetChannel(t *testing.T) {
 	CheckNotFoundStatus(t, resp)
 }
 
+func TestGetDeletedChannelsForTeam(t *testing.T) {
+	th := Setup().InitBasic().InitSystemAdmin()
+	defer TearDown()
+	Client := th.Client
+	team := th.BasicTeam
+
+	channels, resp := Client.GetDeletedChannelsForTeam(team.Id, 0, 100, "")
+	CheckForbiddenStatus(t, resp)
+
+	th.LoginTeamAdmin()
+
+	channels, resp = Client.GetDeletedChannelsForTeam(team.Id, 0, 100, "")
+	CheckNoError(t, resp)
+	if len(channels) != 0 {
+		t.Fatal("should be no deleted channels")
+	}
+
+	// create and delete public channel
+	publicChannel1 := th.CreatePublicChannel()
+	Client.DeleteChannel(publicChannel1.Id)
+
+	channels, resp = Client.GetDeletedChannelsForTeam(team.Id, 0, 100, "")
+	CheckNoError(t, resp)
+	if len(channels) != 1 {
+		t.Fatal("should be 1 deleted channel")
+	}
+
+	publicChannel2 := th.CreatePublicChannel()
+	Client.DeleteChannel(publicChannel2.Id)
+
+	channels, resp = Client.GetDeletedChannelsForTeam(team.Id, 0, 100, "")
+	CheckNoError(t, resp)
+	if len(channels) != 2 {
+		t.Fatal("should be 2 deleted channels")
+	}
+
+	channels, resp = Client.GetDeletedChannelsForTeam(team.Id, 0, 1, "")
+	CheckNoError(t, resp)
+	if len(channels) != 1 {
+		t.Fatal("should be one channel per page")
+	}
+
+	channels, resp = Client.GetDeletedChannelsForTeam(team.Id, 1, 1, "")
+	CheckNoError(t, resp)
+	if len(channels) != 1 {
+		t.Fatal("should be one channel per page")
+	}
+}
+
 func TestGetPublicChannelsForTeam(t *testing.T) {
 	th := Setup().InitBasic().InitSystemAdmin()
 	defer TearDown()
@@ -426,11 +548,11 @@ func TestGetPublicChannelsForTeam(t *testing.T) {
 
 	channels, resp := Client.GetPublicChannelsForTeam(team.Id, 0, 100, "")
 	CheckNoError(t, resp)
-	if len(*channels) != 4 {
+	if len(channels) != 4 {
 		t.Fatal("wrong length")
 	}
 
-	for i, c := range *channels {
+	for i, c := range channels {
 		if c.Type != model.CHANNEL_OPEN {
 			t.Fatal("should include open channel only")
 		}
@@ -445,11 +567,11 @@ func TestGetPublicChannelsForTeam(t *testing.T) {
 	privateChannel := th.CreatePrivateChannel()
 	channels, resp = Client.GetPublicChannelsForTeam(team.Id, 0, 100, "")
 	CheckNoError(t, resp)
-	if len(*channels) != 4 {
+	if len(channels) != 4 {
 		t.Fatal("wrong length")
 	}
 
-	for _, c := range *channels {
+	for _, c := range channels {
 		if c.Type != model.CHANNEL_OPEN {
 			t.Fatal("should not include private channel")
 		}
@@ -461,19 +583,19 @@ func TestGetPublicChannelsForTeam(t *testing.T) {
 
 	channels, resp = Client.GetPublicChannelsForTeam(team.Id, 0, 1, "")
 	CheckNoError(t, resp)
-	if len(*channels) != 1 {
+	if len(channels) != 1 {
 		t.Fatal("should be one channel per page")
 	}
 
 	channels, resp = Client.GetPublicChannelsForTeam(team.Id, 1, 1, "")
 	CheckNoError(t, resp)
-	if len(*channels) != 1 {
+	if len(channels) != 1 {
 		t.Fatal("should be one channel per page")
 	}
 
 	channels, resp = Client.GetPublicChannelsForTeam(team.Id, 10000, 100, "")
 	CheckNoError(t, resp)
-	if len(*channels) != 0 {
+	if len(channels) != 0 {
 		t.Fatal("should be no channel")
 	}
 
@@ -507,11 +629,11 @@ func TestGetPublicChannelsByIdsForTeam(t *testing.T) {
 	channels, resp := Client.GetPublicChannelsByIdsForTeam(teamId, input)
 	CheckNoError(t, resp)
 
-	if len(*channels) != 1 {
+	if len(channels) != 1 {
 		t.Fatal("should return 1 channel")
 	}
 
-	if (*channels)[0].DisplayName != output[0] {
+	if (channels)[0].DisplayName != output[0] {
 		t.Fatal("missing channel")
 	}
 
@@ -524,11 +646,11 @@ func TestGetPublicChannelsByIdsForTeam(t *testing.T) {
 	channels, resp = Client.GetPublicChannelsByIdsForTeam(teamId, input)
 	CheckNoError(t, resp)
 
-	if len(*channels) != 2 {
+	if len(channels) != 2 {
 		t.Fatal("should return 2 channels")
 	}
 
-	for i, c := range *channels {
+	for i, c := range channels {
 		if c.DisplayName != output[i] {
 			t.Fatal("missing channel")
 		}
@@ -567,7 +689,7 @@ func TestGetChannelsForTeamForUser(t *testing.T) {
 	CheckNoError(t, resp)
 
 	found := make([]bool, 3)
-	for _, c := range *channels {
+	for _, c := range channels {
 		if c.Id == th.BasicChannel.Id {
 			found[0] = true
 		} else if c.Id == th.BasicChannel2.Id {
@@ -617,7 +739,7 @@ func TestSearchChannels(t *testing.T) {
 	CheckNoError(t, resp)
 
 	found := false
-	for _, c := range *channels {
+	for _, c := range channels {
 		if c.Type != model.CHANNEL_OPEN {
 			t.Fatal("should only return public channels")
 		}
@@ -636,7 +758,7 @@ func TestSearchChannels(t *testing.T) {
 	CheckNoError(t, resp)
 
 	found = false
-	for _, c := range *channels {
+	for _, c := range channels {
 		if c.Id == th.BasicPrivateChannel.Id {
 			found = true
 		}
@@ -648,7 +770,7 @@ func TestSearchChannels(t *testing.T) {
 
 	search.Term = ""
 	_, resp = Client.SearchChannels(th.BasicTeam.Id, search)
-	CheckBadRequestStatus(t, resp)
+	CheckNoError(t, resp)
 
 	search.Term = th.BasicChannel.Name
 	_, resp = Client.SearchChannels(model.NewId(), search)
@@ -932,6 +1054,16 @@ func TestDeleteChannel(t *testing.T) {
 	CheckNoError(t, resp)
 
 	_, resp = th.SystemAdminClient.DeleteChannel(privateChannel7.Id)
+	CheckNoError(t, resp)
+
+	// last member of a channel should be able to delete it regardless of required permissions
+	publicChannel6 = th.CreateChannelWithClient(th.Client, model.CHANNEL_OPEN)
+	privateChannel7 = th.CreateChannelWithClient(th.Client, model.CHANNEL_PRIVATE)
+
+	_, resp = Client.DeleteChannel(publicChannel6.Id)
+	CheckNoError(t, resp)
+
+	_, resp = Client.DeleteChannel(privateChannel7.Id)
 	CheckNoError(t, resp)
 }
 

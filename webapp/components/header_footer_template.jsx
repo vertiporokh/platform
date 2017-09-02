@@ -33,20 +33,18 @@ export default class NotLoggedIn extends React.Component {
             );
         }
 
-        if (global.window.mm_config.TermsOfServiceLink) {
-            content.push(
-                <a
-                    key='terms_link'
-                    id='terms_link'
-                    className='pull-right footer-link'
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    href={global.window.mm_config.TermsOfServiceLink}
-                >
-                    <FormattedMessage id='web.footer.terms'/>
-                </a>
-            );
-        }
+        content.push(
+            <a
+                key='terms_link'
+                id='terms_link'
+                className='pull-right footer-link'
+                target='_blank'
+                rel='noopener noreferrer'
+                href={global.window.mm_config.TermsOfServiceLink}
+            >
+                <FormattedMessage id='web.footer.terms'/>
+            </a>
+        );
 
         if (global.window.mm_config.PrivacyPolicyLink) {
             content.push(
@@ -90,7 +88,9 @@ export default class NotLoggedIn extends React.Component {
                             <span className='pull-right footer-site-name'>{'Mattermost'}</span>
                         </div>
                         <div className='col-xs-12'>
-                            <span className='pull-right footer-link copyright'>{'© 2015-2016 Mattermost, Inc.'}</span>
+                            <span className='pull-right footer-link copyright'>
+                                {`© 2015-${new Date().getFullYear()} Mattermost, Inc.`}
+                            </span>
                             {content}
                         </div>
                     </div>

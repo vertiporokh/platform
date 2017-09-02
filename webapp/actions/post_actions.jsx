@@ -11,6 +11,7 @@ import {loadStatusesForChannel} from 'actions/status_actions.jsx';
 import {loadNewDMIfNeeded, loadNewGMIfNeeded} from 'actions/user_actions.jsx';
 import {trackEvent} from 'actions/diagnostics_actions.jsx';
 import {sendDesktopNotification} from 'actions/notification_actions.jsx';
+import * as GlobalActions from 'actions/global_actions.jsx';
 
 import Client from 'client/web_client.jsx';
 import * as AsyncClient from 'utils/async_client.jsx';
@@ -18,6 +19,13 @@ import * as AsyncClient from 'utils/async_client.jsx';
 import Constants from 'utils/constants.jsx';
 const ActionTypes = Constants.ActionTypes;
 const Preferences = Constants.Preferences;
+
+// Redux actions
+import store from 'stores/redux_store.jsx';
+const dispatch = store.dispatch;
+const getState = store.getState;
+import {getProfilesByIds} from 'mattermost-redux/actions/users';
+import {getMyChannelMember} from 'mattermost-redux/actions/channels';
 
 export function handleNewPost(post, msg) {
     let websocketMessageProps = {};
@@ -33,7 +41,7 @@ export function handleNewPost(post, msg) {
             Client.setTeamId(msg.data.team_id);
         }
 
-        AsyncClient.getChannelMember(post.channel_id, UserStore.getCurrentId()).then(() => completePostReceive(post, websocketMessageProps));
+        getMyChannelMember(post.channel_id)(dispatch, getState).then(() => completePostReceive(post, websocketMessageProps));
     }
 
     if (msg && msg.data) {
@@ -134,7 +142,7 @@ export function getFlaggedPosts() {
     );
 }
 
-export function getPinnedPosts(channelId) {
+export function getPinnedPosts(channelId = ChannelStore.getCurrentId()) {
     Client.getPinnedPosts(channelId,
         (data) => {
             AppDispatcher.handleServerAction({
@@ -307,7 +315,7 @@ export function loadProfilesForPosts(posts) {
         return;
     }
 
-    AsyncClient.getProfilesByIds(list);
+    getProfilesByIds(list)(dispatch, getState);
 }
 
 export function addReaction(channelId, postId, emojiName) {
@@ -429,11 +437,6 @@ export function updatePost(post, success, isPost) {
         });
 }
 
-export function removePostFromStore(post) {
-    PostStore.removePost(post);
-    PostStore.emitChange();
-}
-
 export function emitEmojiPosted(emoji) {
     AppDispatcher.handleServerAction({
         type: ActionTypes.EMOJI_POSTED,
@@ -446,7 +449,7 @@ export function deletePost(channelId, post, success, error) {
         channelId,
         post.id,
         () => {
-            removePostFromStore(post);
+            GlobalActions.emitRemovePost(post);
             if (post.id === PostStore.getSelectedPostId()) {
                 AppDispatcher.handleServerAction({
                     type: ActionTypes.RECEIVED_POST_SELECTED,

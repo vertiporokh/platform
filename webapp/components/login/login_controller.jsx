@@ -206,19 +206,15 @@ export default class LoginController extends React.Component {
     }
 
     finishSignin(team) {
-        GlobalActions.emitInitialLoad(
-            () => {
-                const query = this.props.location.query;
-                GlobalActions.loadDefaultLocale();
-                if (query.redirect_to) {
-                    browserHistory.push(query.redirect_to);
-                } else if (team) {
-                    browserHistory.push(`/${team.name}`);
-                } else {
-                    GlobalActions.redirectUserToDefaultTeam();
-                }
-            }
-        );
+        const query = this.props.location.query;
+        GlobalActions.loadCurrentLocale();
+        if (query.redirect_to) {
+            browserHistory.push(query.redirect_to);
+        } else if (team) {
+            browserHistory.push(`/${team.name}`);
+        } else {
+            GlobalActions.redirectUserToDefaultTeam();
+        }
     }
 
     handleLoginIdChange(e) {
@@ -420,6 +416,7 @@ export default class LoginController extends React.Component {
                             defaultMessage="Don't have an account? "
                         />
                         <Link
+                            id='signup'
                             to={'/signup_user_complete' + this.props.location.search}
                             className='signup-team-login'
                         >
@@ -479,12 +476,14 @@ export default class LoginController extends React.Component {
                     key='gitlab'
                     href={Client.getOAuthRoute() + '/gitlab/login' + this.props.location.search}
                 >
-                    <span className='icon'/>
                     <span>
-                        <FormattedMessage
-                            id='login.gitlab'
-                            defaultMessage='GitLab'
-                        />
+                        <span className='icon'/>
+                        <span>
+                            <FormattedMessage
+                                id='login.gitlab'
+                                defaultMessage='GitLab'
+                            />
+                        </span>
                     </span>
                 </a>
             );
@@ -497,12 +496,14 @@ export default class LoginController extends React.Component {
                     key='google'
                     href={Client.getOAuthRoute() + '/google/login' + this.props.location.search}
                 >
-                    <span className='icon'/>
                     <span>
-                        <FormattedMessage
-                            id='login.google'
-                            defaultMessage='Google Apps'
-                        />
+                        <span className='icon'/>
+                        <span>
+                            <FormattedMessage
+                                id='login.google'
+                                defaultMessage='Google Apps'
+                            />
+                        </span>
                     </span>
                 </a>
             );
@@ -515,12 +516,14 @@ export default class LoginController extends React.Component {
                     key='office365'
                     href={Client.getOAuthRoute() + '/office365/login' + this.props.location.search}
                 >
-                    <span className='icon'/>
                     <span>
-                        <FormattedMessage
-                            id='login.office365'
-                            defaultMessage='Office 365'
-                        />
+                        <span className='icon'/>
+                        <span>
+                            <FormattedMessage
+                                id='login.office365'
+                                defaultMessage='Office 365'
+                            />
+                        </span>
                     </span>
                 </a>
             );
@@ -533,9 +536,11 @@ export default class LoginController extends React.Component {
                     key='saml'
                     href={'/login/sso/saml' + this.props.location.search}
                 >
-                    <span className='icon fa fa-lock fa--margin-top'/>
                     <span>
-                        {global.window.mm_config.SamlLoginButtonText}
+                        <span className='icon fa fa-lock fa--margin-top'/>
+                        <span>
+                            {global.window.mm_config.SamlLoginButtonText}
+                        </span>
                     </span>
                 </a>
             );
