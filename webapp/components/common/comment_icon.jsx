@@ -1,3 +1,5 @@
+import PropTypes from 'prop-types';
+
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
@@ -19,16 +21,18 @@ export default function CommentIcon(props) {
         iconStyle = iconStyle + ' ' + props.searchStyle;
     }
 
-    let commentIconId = props.idPrefix;
+    let selectorId = props.idPrefix;
     if (props.idCount > -1) {
-        commentIconId += props.idCount;
+        selectorId += props.idCount;
     }
+
+    const id = Utils.createSafeId(props.idPrefix + '_' + props.id);
 
     return (
         <a
-            id={Utils.createSafeId(commentIconId)}
+            id={id}
             href='#'
-            className={iconStyle}
+            className={iconStyle + ' ' + selectorId}
             onClick={props.handleCommentClick}
         >
             <span
@@ -41,15 +45,17 @@ export default function CommentIcon(props) {
 }
 
 CommentIcon.propTypes = {
-    idPrefix: React.PropTypes.string.isRequired,
-    idCount: React.PropTypes.number,
-    handleCommentClick: React.PropTypes.func.isRequired,
-    searchStyle: React.PropTypes.string,
-    commentCount: React.PropTypes.number
+    idPrefix: PropTypes.string.isRequired,
+    idCount: PropTypes.number,
+    handleCommentClick: PropTypes.func.isRequired,
+    searchStyle: PropTypes.string,
+    commentCount: PropTypes.number,
+    id: PropTypes.string
 };
 
 CommentIcon.defaultProps = {
     idCount: -1,
     searchStyle: '',
-    commentCount: 0
+    commentCount: 0,
+    id: ''
 };

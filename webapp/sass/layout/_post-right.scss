@@ -39,10 +39,6 @@
             }
         }
 
-        .post__img {
-            width: 43px;
-        }
-
         .post__body {
             width: 100%;
         }
@@ -95,6 +91,12 @@
             @include opacity(.7);
             margin-right: 10px;
             padding: 6px 0;
+        }
+
+        .emoji-picker {
+            position: absolute;
+            top: -361px;
+            right: 0px;
         }
     }
 }

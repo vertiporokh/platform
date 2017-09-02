@@ -2,14 +2,12 @@
 // See License.txt for license information.
 
 import React from 'react';
+import PropTypes from 'prop-types';
 
-import $ from 'jquery';
 import * as Emoji from 'utils/emoji.jsx';
 import EmojiStore from 'stores/emoji_store.jsx';
 import PureRenderMixin from 'react-addons-pure-render-mixin';
-import ReactDOM from 'react-dom';
 import * as Utils from 'utils/utils.jsx';
-import ReactOutsideEvent from 'react-outside-event';
 import {FormattedMessage} from 'react-intl';
 
 import EmojiPickerCategory from './components/emoji_picker_category.jsx';
@@ -30,13 +28,12 @@ const CATEGORIES = [
     'custom'
 ];
 
-class EmojiPicker extends React.Component {
+export default class EmojiPicker extends React.Component {
     static propTypes = {
-        customEmojis: React.PropTypes.object,
-        onEmojiClick: React.PropTypes.func.isRequired,
-        pickerLocation: React.PropTypes.string.isRequired,
-        emojiOffset: React.PropTypes.number,
-        outsideClick: React.PropTypes.func
+        style: PropTypes.object,
+        placement: PropTypes.oneOf(['top', 'bottom', 'left']),
+        customEmojis: PropTypes.object,
+        onEmojiClick: PropTypes.func.isRequired
     }
 
     constructor(props) {
@@ -53,7 +50,6 @@ class EmojiPicker extends React.Component {
         this.handleScroll = this.handleScroll.bind(this);
         this.handleItemUnmount = this.handleItemUnmount.bind(this);
         this.renderCategory = this.renderCategory.bind(this);
-        this.onOutsideEvent = this.onOutsideEvent.bind(this);
 
         this.state = {
             category: 'recent',
@@ -63,14 +59,11 @@ class EmojiPicker extends React.Component {
     }
 
     componentDidMount() {
-        this.searchInput.focus();
-    }
-
-    onOutsideEvent = (event) => {
-        // Handle the event.
-        if (this.props.outsideClick) {
-            this.props.outsideClick(event);
-        }
+        // Delay taking focus because this briefly renders offscreen when using an Overlay
+        // so focusing it immediately on mount can cause weird scrolling
+        requestAnimationFrame(() => {
+            this.searchInput.focus();
+        });
     }
 
     handleCategoryClick(category) {
@@ -99,7 +92,7 @@ class EmojiPicker extends React.Component {
     }
 
     handleItemUnmount(emoji) {
-        //Prevent emoji preview from showing emoji which is not present anymore (due to filter)
+        // Prevent emoji preview from showing emoji which is not present anymore (due to filter)
         if (this.state.selected === emoji) {
             this.setState({selected: null});
         }
@@ -110,11 +103,11 @@ class EmojiPicker extends React.Component {
     }
 
     handleScroll() {
-        const items = $(ReactDOM.findDOMNode(this.refs.items));
-
-        const contentTop = items.scrollTop();
-        const contentTopPadding = parseInt(items.css('padding-top'), 10);
-        const scrollPct = (contentTop / (items[0].scrollHeight - items[0].clientHeight)) * 100.0;
+        const items = this.refs.items;
+        const contentTop = items.scrollTop;
+        const itemsPaddingTop = getComputedStyle(items).paddingTop;
+        const contentTopPadding = parseInt(itemsPaddingTop, 10);
+        const scrollPct = (contentTop / (items.scrollHeight - items.clientHeight)) * 100.0;
 
         if (scrollPct > 99.0) {
             this.setState({category: 'custom'});
@@ -122,9 +115,12 @@ class EmojiPicker extends React.Component {
         }
 
         for (const category of CATEGORIES) {
-            const header = $(ReactDOM.findDOMNode(this.refs[category]));
-            const headerBottomMargin = parseInt(header.css('margin-bottom'), 10) + parseInt(header.css('padding-bottom'), 10);
-            const headerBottom = header[0].offsetTop + header.height() + headerBottomMargin;
+            const header = this.refs[category];
+            const headerStyle = getComputedStyle(header);
+            const headerBottomMargin = parseInt(headerStyle.marginBottom, 10);
+            const headerBottomPadding = parseInt(headerStyle.paddingBottom, 10);
+            const headerBottomSpace = headerBottomMargin + headerBottomPadding;
+            const headerBottom = header.offsetTop + header.offsetHeight + headerBottomSpace;
 
             // If category is the first one visible, highlight it in the bar at the top
             if (headerBottom - contentTopPadding >= contentTop) {
@@ -289,22 +285,25 @@ class EmojiPicker extends React.Component {
                 items.push(this.renderCategory(category, this.state.filter));
             }
         }
-        let cssclass = 'emoji-picker ';
-        if (this.props.pickerLocation === 'top') {
-            cssclass += 'emoji-picker-top';
-        } else if (this.props.pickerLocation === 'bottom') {
-            cssclass += 'emoji-picker-bottom';
-        } else if (this.props.pickerLocation === 'react') {
-            cssclass = 'emoji-picker-react';
-        } else if (this.props.pickerLocation === 'react-rhs-comment') {
-            cssclass = 'emoji-picker-react-rhs-comment';
+
+        let pickerStyle;
+        if (this.props.style && !(this.props.style.left === 0 || this.props.style.top === 0)) {
+            if (this.props.placement === 'top' || this.props.placement === 'bottom') {
+                // Only take the top/bottom position passed by React Bootstrap since we want to be right-aligned
+                pickerStyle = {
+                    top: this.props.style.top,
+                    bottom: this.props.style.bottom,
+                    right: 1
+                };
+            } else {
+                pickerStyle = this.props.style;
+            }
         }
 
-        const pickerStyle = this.props.emojiOffset ? {top: this.props.emojiOffset} : {};
         return (
             <div
+                className='emoji-picker'
                 style={pickerStyle}
-                className={cssclass}
             >
                 <div className='emoji-picker__categories'>
                     <EmojiPickerCategory
@@ -423,7 +422,3 @@ class EmojiPicker extends React.Component {
         );
     }
 }
-
-// disabling eslint check for outslide click handler
-// eslint-disable-next-line new-cap
-export default ReactOutsideEvent(EmojiPicker, ['click']);

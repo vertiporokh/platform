@@ -1,3 +1,5 @@
+import PropTypes from 'prop-types';
+
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
@@ -8,13 +10,13 @@ import UserStore from 'stores/user_store.jsx';
 
 import BackstageSidebar from './components/backstage_sidebar.jsx';
 import BackstageNavbar from './components/backstage_navbar.jsx';
-import ErrorBar from 'components/error_bar.jsx';
+import AnnouncementBar from 'components/announcement_bar';
 
 export default class BackstageController extends React.Component {
     static get propTypes() {
         return {
-            user: React.PropTypes.object,
-            children: React.PropTypes.node.isRequired
+            user: PropTypes.object,
+            children: PropTypes.node.isRequired
         };
     }
 
@@ -53,7 +55,7 @@ export default class BackstageController extends React.Component {
     render() {
         return (
             <div className='backstage'>
-                <ErrorBar/>
+                <AnnouncementBar/>
                 <BackstageNavbar team={this.state.team}/>
                 <div className='backstage-body'>
                     <BackstageSidebar

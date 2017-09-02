@@ -254,6 +254,10 @@ func (c *Client4) GetOpenGraphRoute() string {
 	return fmt.Sprintf("/opengraph")
 }
 
+func (c *Client4) GetJobsRoute() string {
+	return fmt.Sprintf("/jobs")
+}
+
 func (c *Client4) DoApiGet(url string, etag string) (*http.Response, *AppError) {
 	return c.DoApiRequest(http.MethodGet, c.ApiUrl+url, "", etag)
 }
@@ -1042,6 +1046,17 @@ func (c *Client4) SoftDeleteTeam(teamId string) (bool, *Response) {
 	}
 }
 
+// PermanentDeleteTeam deletes the team, should only be used when needed for
+// compliance and the like
+func (c *Client4) PermanentDeleteTeam(teamId string) (bool, *Response) {
+	if r, err := c.DoApiDelete(c.GetTeamRoute(teamId) + "?permanent=true"); err != nil {
+		return false, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return CheckStatusOK(r), BuildResponse(r)
+	}
+}
+
 // GetTeamMembers returns team members based on the provided team id string.
 func (c *Client4) GetTeamMembers(teamId string, page int, perPage int, etag string) ([]*TeamMember, *Response) {
 	query := fmt.Sprintf("?page=%v&per_page=%v", page, perPage)
@@ -1210,6 +1225,16 @@ func (c *Client4) UpdateChannel(channel *Channel) (*Channel, *Response) {
 // PatchChannel partially updates a channel. Any missing fields are not updated.
 func (c *Client4) PatchChannel(channelId string, patch *ChannelPatch) (*Channel, *Response) {
 	if r, err := c.DoApiPut(c.GetChannelRoute(channelId)+"/patch", patch.ToJson()); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return ChannelFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// RestoreChannel restores a previously deleted channel. Any missing fields are not updated.
+func (c *Client4) RestoreChannel(channelId string) (*Channel, *Response) {
+	if r, err := c.DoApiPost(c.GetChannelRoute(channelId)+"/restore", ""); err != nil {
 		return nil, &Response{StatusCode: r.StatusCode, Error: err}
 	} else {
 		defer closeBody(r)
@@ -1723,15 +1748,18 @@ func (c *Client4) GetFileInfosForPost(postId string, etag string) ([]*FileInfo, 
 	}
 }
 
-// General Section
+// General/System Section
 
-// GetPing will ping the server and to see if it is up and running.
-func (c *Client4) GetPing() (bool, *Response) {
-	if r, err := c.DoApiGet(c.GetSystemRoute()+"/ping", ""); err != nil {
-		return false, &Response{StatusCode: r.StatusCode, Error: err}
+// GetPing will return ok if the running goRoutines are below the threshold and unhealthy for above.
+func (c *Client4) GetPing() (string, *Response) {
+	if r, err := c.DoApiGet(c.GetSystemRoute()+"/ping", ""); r.StatusCode == 500 {
+		defer r.Body.Close()
+		return "unhealthy", &Response{StatusCode: r.StatusCode, Error: err}
+	} else if err != nil {
+		return "", &Response{StatusCode: r.StatusCode, Error: err}
 	} else {
 		defer closeBody(r)
-		return CheckStatusOK(r), BuildResponse(r)
+		return MapFromJson(r.Body)["status"], BuildResponse(r)
 	}
 }
 
@@ -2626,5 +2654,27 @@ func (c *Client4) OpenGraph(url string) (map[string]string, *Response) {
 	} else {
 		defer closeBody(r)
 		return MapFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// Jobs Section
+
+// GetJobStatus gets the status of a single job.
+func (c *Client4) GetJobStatus(id string) (*JobStatus, *Response) {
+	if r, err := c.DoApiGet(c.GetJobsRoute()+fmt.Sprintf("/%v/status", id), ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return JobStatusFromJson(r.Body), BuildResponse(r)
+	}
+}
+
+// GetJobStatusesByType gets the status of all jobs of a given type, sorted with the job that most recently started first.
+func (c *Client4) GetJobStatusesByType(jobType string, page int, perPage int) ([]*JobStatus, *Response) {
+	if r, err := c.DoApiGet(c.GetJobsRoute()+fmt.Sprintf("/type/%v/statuses?page=%v&per_page=%v", jobType, page, perPage), ""); err != nil {
+		return nil, &Response{StatusCode: r.StatusCode, Error: err}
+	} else {
+		defer closeBody(r)
+		return JobStatusesFromJson(r.Body), BuildResponse(r)
 	}
 }

@@ -285,6 +285,14 @@ func UpdateChannel(channel *model.Channel) (*model.Channel, *model.AppError) {
 	}
 }
 
+func RestoreChannel(channel *model.Channel) (*model.Channel, *model.AppError) {
+	if result := <-Srv.Store.Channel().Restore(channel.Id, model.GetMillis()); result.Err != nil {
+		return nil, result.Err
+	} else {
+		return channel, nil
+	}
+}
+
 func PatchChannel(channel *model.Channel, patch *model.ChannelPatch, userId string) (*model.Channel, *model.AppError) {
 	oldChannelDisplayName := channel.DisplayName
 	oldChannelHeader := channel.Header
@@ -1033,7 +1041,7 @@ func SetActiveChannel(userId string, channelId string) *model.AppError {
 	} else {
 		oldStatus = status.Status
 		status.ActiveChannel = channelId
-		if !status.Manual {
+		if !status.Manual && channelId != "" {
 			status.Status = model.STATUS_ONLINE
 		}
 		status.LastActivityAt = model.GetMillis()

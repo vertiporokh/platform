@@ -22,6 +22,8 @@ import * as PostUtils from 'utils/post_utils.jsx';
 import Constants from 'utils/constants.jsx';
 const ActionTypes = Constants.ActionTypes;
 
+import PropTypes from 'prop-types';
+
 import React from 'react';
 import {FormattedMessage, FormattedDate} from 'react-intl';
 import {browserHistory, Link} from 'react-router/es6';
@@ -148,7 +150,7 @@ export default class SearchResultsItem extends React.Component {
 
         let botIndicator;
         if (post.props && post.props.from_webhook) {
-            botIndicator = <li className='bot-indicator'>{Constants.BOT_NAME}</li>;
+            botIndicator = <div className='bot-indicator'>{Constants.BOT_NAME}</div>;
         }
 
         const profilePic = (
@@ -164,7 +166,12 @@ export default class SearchResultsItem extends React.Component {
         let compactClass = '';
         const profilePicContainer = (<div className='post__img'>{profilePic}</div>);
         if (this.props.compactDisplay) {
-            compactClass = 'post--compact';
+            compactClass = ' post--compact';
+        }
+
+        let postClass = '';
+        if (PostUtils.isEdited(this.props.post)) {
+            postClass += ' post--edited';
         }
 
         let fileAttachment = null;
@@ -200,7 +207,7 @@ export default class SearchResultsItem extends React.Component {
             );
 
             rhsControls = (
-                <li className='col__controls'>
+                <div className='col__controls'>
                     <CommentIcon
                         idPrefix={'searchCommentIcon'}
                         idCount={idCount}
@@ -241,7 +248,7 @@ export default class SearchResultsItem extends React.Component {
                             defaultMessage='Jump'
                         />
                     </a>
-                </li>
+                </div>
             );
 
             message = (
@@ -287,8 +294,8 @@ export default class SearchResultsItem extends React.Component {
                     <div className='post__content'>
                         {profilePicContainer}
                         <div>
-                            <ul className='post__header'>
-                                <li className='col col__name'><strong>
+                            <div className='post__header'>
+                                <div className='col col__name'><strong>
                                     <UserProfile
                                         user={user}
                                         overwriteName={overrideUsername}
@@ -296,18 +303,20 @@ export default class SearchResultsItem extends React.Component {
                                         status={this.props.status}
                                         isBusy={this.props.isBusy}
                                     />
-                                </strong></li>
+                                </strong></div>
                                 {botIndicator}
-                                <li className='col'>
+                                <div className='col'>
                                     {this.renderTimeTag(post)}
                                     {pinnedBadge}
                                     {flagContent}
-                                </li>
+                                </div>
                                 {rhsControls}
-                            </ul>
+                            </div>
                             <div className='search-item-snippet post__body'>
-                                {message}
-                                {fileAttachment}
+                                <div className={postClass}>
+                                    {message}
+                                    {fileAttachment}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -318,17 +327,17 @@ export default class SearchResultsItem extends React.Component {
 }
 
 SearchResultsItem.propTypes = {
-    post: React.PropTypes.object,
-    lastPostCount: React.PropTypes.number,
-    user: React.PropTypes.object,
-    channel: React.PropTypes.object,
-    compactDisplay: React.PropTypes.bool,
-    isMentionSearch: React.PropTypes.bool,
-    isFlaggedSearch: React.PropTypes.bool,
-    term: React.PropTypes.string,
-    useMilitaryTime: React.PropTypes.bool.isRequired,
-    shrink: React.PropTypes.func,
-    isFlagged: React.PropTypes.bool,
-    isBusy: React.PropTypes.bool,
-    status: React.PropTypes.string
+    post: PropTypes.object,
+    lastPostCount: PropTypes.number,
+    user: PropTypes.object,
+    channel: PropTypes.object,
+    compactDisplay: PropTypes.bool,
+    isMentionSearch: PropTypes.bool,
+    isFlaggedSearch: PropTypes.bool,
+    term: PropTypes.string,
+    useMilitaryTime: PropTypes.bool.isRequired,
+    shrink: PropTypes.func,
+    isFlagged: PropTypes.bool,
+    isBusy: PropTypes.bool,
+    status: PropTypes.string
 };

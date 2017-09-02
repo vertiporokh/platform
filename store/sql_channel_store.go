@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	l4g "github.com/alecthomas/log4go"
-	"github.com/go-gorp/gorp"
+	"github.com/mattermost/gorp"
 	"github.com/mattermost/platform/einterfaces"
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/utils"
@@ -438,6 +438,10 @@ func (s SqlChannelStore) get(id string, master bool, allowFromCache bool) StoreC
 
 func (s SqlChannelStore) Delete(channelId string, time int64) StoreChannel {
 	return s.SetDeleteAt(channelId, time, time)
+}
+
+func (s SqlChannelStore) Restore(channelId string, time int64) StoreChannel {
+	return s.SetDeleteAt(channelId, 0, time)
 }
 
 func (s SqlChannelStore) SetDeleteAt(channelId string, deleteAt int64, updateAt int64) StoreChannel {

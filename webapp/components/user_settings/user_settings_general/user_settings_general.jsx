@@ -76,19 +76,21 @@ const holders = defineMessages({
     }
 });
 
+import PropTypes from 'prop-types';
+
 import React from 'react';
 
 class UserSettingsGeneralTab extends React.Component {
     static propTypes = {
         intl: intlShape.isRequired,
-        user: React.PropTypes.object.isRequired,
-        updateSection: React.PropTypes.func.isRequired,
-        updateTab: React.PropTypes.func.isRequired,
-        activeSection: React.PropTypes.string.isRequired,
-        closeModal: React.PropTypes.func.isRequired,
-        collapseModal: React.PropTypes.func.isRequired,
-        actions: React.PropTypes.shape({
-            getMe: React.PropTypes.func.isRequired
+        user: PropTypes.object.isRequired,
+        updateSection: PropTypes.func.isRequired,
+        updateTab: PropTypes.func.isRequired,
+        activeSection: PropTypes.string.isRequired,
+        closeModal: PropTypes.func.isRequired,
+        collapseModal: PropTypes.func.isRequired,
+        actions: PropTypes.shape({
+            getMe: PropTypes.func.isRequired
         }).isRequired
     }
 
@@ -485,7 +487,7 @@ class UserSettingsGeneralTab extends React.Component {
                                 id='user.settings.general.emailGitlabCantUpdate'
                                 defaultMessage='Login occurs through GitLab. Email cannot be updated. Email address used for notifications is {email}.'
                                 values={{
-                                    email: this.state.email
+                                    email: this.state.originalEmail
                                 }}
                             />
                         </div>
@@ -503,7 +505,7 @@ class UserSettingsGeneralTab extends React.Component {
                                 id='user.settings.general.emailGoogleCantUpdate'
                                 defaultMessage='Login occurs through Google Apps. Email cannot be updated. Email address used for notifications is {email}.'
                                 values={{
-                                    email: this.state.email
+                                    email: this.state.originalEmail
                                 }}
                             />
                         </div>
@@ -521,7 +523,7 @@ class UserSettingsGeneralTab extends React.Component {
                                 id='user.settings.general.emailOffice365CantUpdate'
                                 defaultMessage='Login occurs through Office 365. Email cannot be updated. Email address used for notifications is {email}.'
                                 values={{
-                                    email: this.state.email
+                                    email: this.state.originalEmail
                                 }}
                             />
                         </div>
@@ -539,7 +541,7 @@ class UserSettingsGeneralTab extends React.Component {
                                 id='user.settings.general.emailLdapCantUpdate'
                                 defaultMessage='Login occurs through AD/LDAP. Email cannot be updated. Email address used for notifications is {email}.'
                                 values={{
-                                    email: this.state.email
+                                    email: this.state.originalEmail
                                 }}
                             />
                         </div>
@@ -556,7 +558,7 @@ class UserSettingsGeneralTab extends React.Component {
                                 id='user.settings.general.emailSamlCantUpdate'
                                 defaultMessage='Login occurs through SAML. Email cannot be updated. Email address used for notifications is {email}.'
                                 values={{
-                                    email: this.state.email
+                                    email: this.state.originalEmail
                                 }}
                             />
                         </div>
@@ -615,7 +617,7 @@ class UserSettingsGeneralTab extends React.Component {
                         id='user.settings.general.loginGitlab'
                         defaultMessage='Login done through GitLab ({email})'
                         values={{
-                            email: this.state.email
+                            email: this.state.originalEmail
                         }}
                     />
                 );
@@ -625,7 +627,7 @@ class UserSettingsGeneralTab extends React.Component {
                         id='user.settings.general.loginGoogle'
                         defaultMessage='Login done through Google Apps ({email})'
                         values={{
-                            email: this.state.email
+                            email: this.state.originalEmail
                         }}
                     />
                 );
@@ -635,7 +637,7 @@ class UserSettingsGeneralTab extends React.Component {
                         id='user.settings.general.loginOffice365'
                         defaultMessage='Login done through Office 365 ({email})'
                         values={{
-                            email: this.state.email
+                            email: this.state.originalEmail
                         }}
                     />
                 );
@@ -645,7 +647,7 @@ class UserSettingsGeneralTab extends React.Component {
                         id='user.settings.general.loginLdap'
                         defaultMessage='Login done through AD/LDAP ({email})'
                         values={{
-                            email: this.state.email
+                            email: this.state.originalEmail
                         }}
                     />
                 );
@@ -655,7 +657,7 @@ class UserSettingsGeneralTab extends React.Component {
                         id='user.settings.general.loginSaml'
                         defaultMessage='Login done through SAML ({email})'
                         values={{
-                            email: this.state.email
+                            email: this.state.originalEmail
                         }}
                     />
                 );

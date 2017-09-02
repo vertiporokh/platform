@@ -12,6 +12,7 @@
         "ReadTimeout": 300,
         "WriteTimeout": 300,
         "MaximumLoginAttempts": 10,
+        "GoroutineHealthThreshold": -1,
         "GoogleDeveloperKey": "",
         "EnableOAuthServiceProvider": false,
         "EnableIncomingWebhooks": true,
@@ -46,6 +47,14 @@
         "EnableUserStatuses": true,
         "ClusterLogTimeoutMilliseconds": 2000
     },
+    "ElasticSearchSettings": {
+        "ConnectionUrl": "http://dockerhost:9200",
+        "Username": "elastic",
+        "Password": "changeme",
+        "EnableIndexing": false,
+        "EnableSearching": false,
+        "Sniff": true
+    },
     "TeamSettings": {
         "SiteName": "Mattermost",
         "MaxUsersPerTeam": 50,
@@ -77,7 +86,8 @@
         "MaxIdleConns": 20,
         "MaxOpenConns": 300,
         "Trace": false,
-        "AtRestEncryptKey": ""
+        "AtRestEncryptKey": "",
+        "QueryTimeout": 30
     },
     "LogSettings": {
         "EnableConsole": true,
@@ -115,7 +125,8 @@
         "AmazonS3Bucket": "",
         "AmazonS3Region": "us-east-1",
         "AmazonS3Endpoint": "s3.amazonaws.com",
-        "AmazonS3SSL": true
+        "AmazonS3SSL": true,
+        "AmazonS3SignV2": false
     },
     "EmailSettings": {
         "EnableSignUpWithEmail": true,
@@ -159,6 +170,13 @@
         "HelpLink": "https://about.mattermost.com/default-help/",
         "ReportAProblemLink": "https://about.mattermost.com/default-report-a-problem/",
         "SupportEmail": "feedback@mattermost.com"
+    },
+    "AnnouncementSettings": {
+        "EnableBanner": false,
+        "BannerText": "",
+        "BannerColor": "#f2a93b",
+        "BannerTextColor": "#333333",
+        "AllowBannerDismissal": true
     },
     "GitLabSettings": {
         "Enable": false,
@@ -265,5 +283,8 @@
         "TurnURI": "",
         "TurnUsername": "",
         "TurnSharedKey": ""
+    },
+    "DataRetentionSettings": {
+        "Enable": false
     }
 }

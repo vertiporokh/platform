@@ -10,6 +10,10 @@
     width: 400px;
     z-index: 8;
 
+    .error-bar--fixed & {
+        height: calc(100% - 22px);
+    }
+
     &.webrtc {
         z-index: 5;
     }
@@ -46,10 +50,6 @@
             .post__pinned-badge {
                 margin: 0 0 0 5px;
             }
-        }
-
-        .post__img {
-            width: 43px;
         }
 
         .post__content {
@@ -89,8 +89,8 @@
                 @include opacity(.55);
                 position: absolute;
                 top: -25px;
-          }
-       }
+            }
+        }
     }
 
     .help__format-text {

@@ -1,6 +1,8 @@
+import PropTypes from 'prop-types';
 import React from 'react';
 
 import ConfirmModal from './confirm_modal.jsx';
+import Constants from 'utils/constants.jsx';
 
 export default class DeleteModalTrigger extends React.Component {
     constructor(props) {
@@ -11,6 +13,7 @@ export default class DeleteModalTrigger extends React.Component {
         this.handleConfirm = this.handleConfirm.bind(this);
         this.handleCancel = this.handleCancel.bind(this);
         this.handleOpenModal = this.handleOpenModal.bind(this);
+        this.handleKeyDown = this.handleKeyDown.bind(this);
 
         this.state = {
             showDeleteModal: false
@@ -25,14 +28,20 @@ export default class DeleteModalTrigger extends React.Component {
         });
     }
 
-    handleConfirm(e) {
-        this.props.onDelete(e);
+    handleConfirm() {
+        this.props.onDelete();
     }
 
     handleCancel() {
         this.setState({
             showDeleteModal: false
         });
+    }
+
+    handleKeyDown(e) {
+        if (e.keyCode === Constants.KeyCodes.ENTER) {
+            this.handleConfirm(e);
+        }
     }
 
     render() {
@@ -48,9 +57,10 @@ export default class DeleteModalTrigger extends React.Component {
                     show={this.state.showDeleteModal}
                     title={this.modalTitle}
                     message={this.modalMessage}
-                    confirmButton={this.modalConfirmButton}
+                    confirmButtonText={this.modalConfirmButton}
                     onConfirm={this.handleConfirm}
                     onCancel={this.handleCancel}
+                    onKeyDown={this.handleKeyDown}
                 />
             </span>
         );
@@ -58,5 +68,5 @@ export default class DeleteModalTrigger extends React.Component {
 }
 
 DeleteModalTrigger.propTypes = {
-    onDelete: React.PropTypes.func.isRequired
+    onDelete: PropTypes.func.isRequired
 };

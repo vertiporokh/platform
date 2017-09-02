@@ -12,7 +12,9 @@ import TeamStore from 'stores/team_store.jsx';
 
 import Constants from 'utils/constants.jsx';
 import {displayUsernameForUser} from 'utils/utils.jsx';
-import Client from 'client/web_client.jsx';
+import {Client4} from 'mattermost-redux/client';
+
+import PropTypes from 'prop-types';
 
 import React from 'react';
 import {Modal} from 'react-bootstrap';
@@ -27,9 +29,9 @@ const MAX_SELECTABLE_VALUES = 20;
 
 export default class AddUsersToTeam extends React.Component {
     static propTypes = {
-        onModalDismissed: React.PropTypes.func,
-        actions: React.PropTypes.shape({
-            getProfilesNotInTeam: React.PropTypes.func.isRequired
+        onModalDismissed: PropTypes.func,
+        actions: PropTypes.shape({
+            getProfilesNotInTeam: PropTypes.func.isRequired
         }).isRequired
     }
 
@@ -168,7 +170,7 @@ export default class AddUsersToTeam extends React.Component {
                 onClick={() => onAdd(option)}
             >
                 <ProfilePicture
-                    src={`${Client.getUsersRoute()}/${option.id}/image?time=${option.last_picture_update}`}
+                    src={Client4.getProfilePictureUrl(option.id, option.last_picture_update)}
                     width='32'
                     height='32'
                 />

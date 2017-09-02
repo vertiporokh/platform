@@ -4,6 +4,8 @@
 import * as Utils from 'utils/utils.jsx';
 import Constants from 'utils/constants.jsx';
 
+import PropTypes from 'prop-types';
+
 import React from 'react';
 import ReactDOM from 'react-dom';
 import {FormattedMessage} from 'react-intl';
@@ -49,6 +51,7 @@ export default class OAuthToEmail extends React.Component {
         this.setState(state);
 
         oauthToEmail(
+            this.props.currentType,
             this.props.email,
             password,
             null,
@@ -139,6 +142,6 @@ export default class OAuthToEmail extends React.Component {
 OAuthToEmail.defaultProps = {
 };
 OAuthToEmail.propTypes = {
-    currentType: React.PropTypes.string,
-    email: React.PropTypes.string
+    currentType: PropTypes.string,
+    email: PropTypes.string
 };

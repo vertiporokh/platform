@@ -497,3 +497,11 @@ export function performSearch(terms, isMentionSearch, success, error) {
         }
     );
 }
+
+export function storePostDraft(channelId, draft) {
+    AppDispatcher.handleViewAction({
+        type: ActionTypes.POST_DRAFT_CHANGED,
+        channelId,
+        draft
+    });
+}

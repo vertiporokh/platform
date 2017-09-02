@@ -114,6 +114,25 @@ func ValidateLicense(signed []byte) (bool, string) {
 	return true, string(plaintext)
 }
 
+func GetAndValidateLicenseFileFromDisk() (*model.License, []byte) {
+	fileName := GetLicenseFileLocation(*Cfg.ServiceSettings.LicenseFileLocation)
+
+	if _, err := os.Stat(fileName); err != nil {
+		l4g.Debug("We could not find the license key in the database or on disk at %v", fileName)
+		return nil, nil
+	}
+
+	l4g.Info("License key has not been uploaded.  Loading license key from disk at %v", fileName)
+	licenseBytes := GetLicenseFileFromDisk(fileName)
+
+	if success, licenseStr := ValidateLicense(licenseBytes); !success {
+		l4g.Error("Found license key at %v but it appears to be invalid.", fileName)
+		return nil, nil
+	} else {
+		return model.LicenseFromJson(strings.NewReader(licenseStr)), licenseBytes
+	}
+}
+
 func GetLicenseFileFromDisk(fileName string) []byte {
 	file, err := os.Open(fileName)
 	if err != nil {
@@ -133,7 +152,8 @@ func GetLicenseFileFromDisk(fileName string) []byte {
 
 func GetLicenseFileLocation(fileLocation string) string {
 	if fileLocation == "" {
-		return FindDir("config") + "mattermost.mattermost-license"
+		configDir, _ := FindDir("config")
+		return configDir + "mattermost.mattermost-license"
 	} else {
 		return fileLocation
 	}
@@ -158,6 +178,7 @@ func getClientLicense(l *model.License) map[string]string {
 		props["CustomBrand"] = strconv.FormatBool(*l.Features.CustomBrand)
 		props["MHPNS"] = strconv.FormatBool(*l.Features.MHPNS)
 		props["PasswordRequirements"] = strconv.FormatBool(*l.Features.PasswordRequirements)
+		props["Announcement"] = strconv.FormatBool(*l.Features.Announcement)
 		props["IssuedAt"] = strconv.FormatInt(l.IssuedAt, 10)
 		props["StartsAt"] = strconv.FormatInt(l.StartsAt, 10)
 		props["ExpiresAt"] = strconv.FormatInt(l.ExpiresAt, 10)

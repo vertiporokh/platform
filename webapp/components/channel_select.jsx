@@ -2,6 +2,7 @@
 // See License.txt for license information.
 
 import React from 'react';
+import PropTypes from 'prop-types';
 
 import Constants from 'utils/constants.jsx';
 import ChannelStore from 'stores/channel_store.jsx';
@@ -11,11 +12,11 @@ import {sortChannelsByDisplayName} from 'utils/channel_utils.jsx';
 export default class ChannelSelect extends React.Component {
     static get propTypes() {
         return {
-            onChange: React.PropTypes.func,
-            value: React.PropTypes.string,
-            selectOpen: React.PropTypes.bool.isRequired,
-            selectPrivate: React.PropTypes.bool.isRequired,
-            selectDm: React.PropTypes.bool.isRequired
+            onChange: PropTypes.func,
+            value: PropTypes.string,
+            selectOpen: PropTypes.bool.isRequired,
+            selectPrivate: PropTypes.bool.isRequired,
+            selectDm: PropTypes.bool.isRequired
         };
     }
 
