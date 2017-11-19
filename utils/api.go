@@ -15,7 +15,15 @@ type OriginCheckerProc func(*http.Request) bool
 
 func OriginChecker(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	return *Cfg.ServiceSettings.AllowCorsFrom == "*" || strings.Contains(*Cfg.ServiceSettings.AllowCorsFrom, origin)
+	if *Cfg.ServiceSettings.AllowCorsFrom == "*" {
+		return true
+	}
+	for _, allowed := range strings.Split(*Cfg.ServiceSettings.AllowCorsFrom, " ") {
+		if allowed == origin {
+			return true
+		}
+	}
+	return false
 }
 
 func GetOriginChecker(r *http.Request) OriginCheckerProc {
@@ -27,13 +35,8 @@ func GetOriginChecker(r *http.Request) OriginCheckerProc {
 }
 
 func RenderWebError(err *model.AppError, w http.ResponseWriter, r *http.Request) {
-	T, _ := GetTranslationsAndLocale(w, r)
-
-	title := T("api.templates.error.title", map[string]interface{}{"SiteName": ClientCfg["SiteName"]})
 	message := err.Message
 	details := err.DetailedError
-	link := "/"
-	linkMessage := T("api.templates.error.link")
 
 	status := http.StatusTemporaryRedirect
 	if err.StatusCode != http.StatusInternalServerError {
@@ -43,10 +46,7 @@ func RenderWebError(err *model.AppError, w http.ResponseWriter, r *http.Request)
 	http.Redirect(
 		w,
 		r,
-		"/error?title="+url.QueryEscape(title)+
-			"&message="+url.QueryEscape(message)+
-			"&details="+url.QueryEscape(details)+
-			"&link="+url.QueryEscape(link)+
-			"&linkmessage="+url.QueryEscape(linkMessage),
+		"/error?message="+url.QueryEscape(message)+
+			"&details="+url.QueryEscape(details),
 		status)
 }

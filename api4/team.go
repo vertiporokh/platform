@@ -5,7 +5,7 @@ package api4
 
 import (
 	"bytes"
-	"io"
+	"encoding/base64"
 	"net/http"
 	"strconv"
 
@@ -37,6 +37,7 @@ func InitTeam() {
 	BaseRoutes.TeamMembers.Handle("/ids", ApiSessionRequired(getTeamMembersByIds)).Methods("POST")
 	BaseRoutes.TeamMembersForUser.Handle("", ApiSessionRequired(getTeamMembersForUser)).Methods("GET")
 	BaseRoutes.TeamMembers.Handle("", ApiSessionRequired(addTeamMember)).Methods("POST")
+	BaseRoutes.Teams.Handle("/members/invite", ApiSessionRequired(addUserToTeamFromInvite)).Methods("POST")
 	BaseRoutes.TeamMembers.Handle("/batch", ApiSessionRequired(addTeamMembers)).Methods("POST")
 	BaseRoutes.TeamMember.Handle("", ApiSessionRequired(removeTeamMember)).Methods("DELETE")
 
@@ -49,6 +50,7 @@ func InitTeam() {
 
 	BaseRoutes.Team.Handle("/import", ApiSessionRequired(importTeam)).Methods("POST")
 	BaseRoutes.Team.Handle("/invite/email", ApiSessionRequired(inviteUsersToTeam)).Methods("POST")
+	BaseRoutes.Teams.Handle("/invite/{invite_id:[A-Za-z0-9]+}", ApiHandler(getInviteInfo)).Methods("GET")
 }
 
 func createTeam(c *Context, w http.ResponseWriter, r *http.Request) {
@@ -83,7 +85,7 @@ func getTeam(c *Context, w http.ResponseWriter, r *http.Request) {
 		c.Err = err
 		return
 	} else {
-		if team.Type != model.TEAM_OPEN && !app.SessionHasPermissionToTeam(c.Session, team.Id, model.PERMISSION_VIEW_TEAM) {
+		if (!team.AllowOpenInvite || team.Type != model.TEAM_OPEN) && !app.SessionHasPermissionToTeam(c.Session, team.Id, model.PERMISSION_VIEW_TEAM) {
 			c.SetPermissionError(model.PERMISSION_VIEW_TEAM)
 			return
 		}
@@ -103,7 +105,7 @@ func getTeamByName(c *Context, w http.ResponseWriter, r *http.Request) {
 		c.Err = err
 		return
 	} else {
-		if team.Type != model.TEAM_OPEN && !app.SessionHasPermissionToTeam(c.Session, team.Id, model.PERMISSION_VIEW_TEAM) {
+		if (!team.AllowOpenInvite || team.Type != model.TEAM_OPEN) && !app.SessionHasPermissionToTeam(c.Session, team.Id, model.PERMISSION_VIEW_TEAM) {
 			c.SetPermissionError(model.PERMISSION_VIEW_TEAM)
 			return
 		}
@@ -340,32 +342,39 @@ func addTeamMember(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(member.UserId) != 26 {
+		c.SetInvalidParam("user_id")
+		return
+	}
+
+	if !app.SessionHasPermissionToTeam(c.Session, member.TeamId, model.PERMISSION_ADD_USER_TO_TEAM) {
+		c.SetPermissionError(model.PERMISSION_ADD_USER_TO_TEAM)
+		return
+	}
+
+	member, err = app.AddTeamMember(member.TeamId, member.UserId)
+
+	if err != nil {
+		c.Err = err
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(member.ToJson()))
+}
+
+func addUserToTeamFromInvite(c *Context, w http.ResponseWriter, r *http.Request) {
 	hash := r.URL.Query().Get("hash")
 	data := r.URL.Query().Get("data")
 	inviteId := r.URL.Query().Get("invite_id")
 
-	if len(member.UserId) > 0 {
-		if len(member.UserId) != 26 {
-			c.SetInvalidParam("user_id")
-			return
-		}
+	var member *model.TeamMember
+	var err *model.AppError
 
-		if !app.SessionHasPermissionToTeam(c.Session, member.TeamId, model.PERMISSION_ADD_USER_TO_TEAM) {
-			c.SetPermissionError(model.PERMISSION_ADD_USER_TO_TEAM)
-			return
-		}
-
-		member, err = app.AddTeamMember(member.TeamId, member.UserId)
-	} else if len(hash) > 0 && len(data) > 0 {
+	if len(hash) > 0 && len(data) > 0 {
 		member, err = app.AddTeamMemberByHash(c.Session.UserId, hash, data)
-		if err != nil {
-			err = model.NewAppError("addTeamMember", "api.team.add_user_to_team.invalid_data.app_error", nil, "", http.StatusNotFound)
-		}
 	} else if len(inviteId) > 0 {
 		member, err = app.AddTeamMemberByInviteId(inviteId, c.Session.UserId)
-		if err != nil {
-			err = model.NewAppError("addTeamMember", "api.team.add_user_to_team.invalid_invite_id.app_error", nil, "", http.StatusNotFound)
-		}
 	} else {
 		err = model.NewAppError("addTeamMember", "api.team.add_user_to_team.missing_parameter.app_error", nil, "", http.StatusBadRequest)
 	}
@@ -648,12 +657,12 @@ func importTeam(c *Context, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Disposition", "attachment; filename=MattermostImportLog.txt")
-	w.Header().Set("Content-Type", "application/octet-stream")
+	data := map[string]string{}
+	data["results"] = base64.StdEncoding.EncodeToString([]byte(log.Bytes()))
 	if c.Err != nil {
 		w.WriteHeader(c.Err.StatusCode)
 	}
-	io.Copy(w, bytes.NewReader(log.Bytes()))
+	w.Write([]byte(model.MapToJson(data)))
 }
 
 func inviteUsersToTeam(c *Context, w http.ResponseWriter, r *http.Request) {
@@ -686,4 +695,28 @@ func inviteUsersToTeam(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	ReturnStatusOK(w)
+}
+
+func getInviteInfo(c *Context, w http.ResponseWriter, r *http.Request) {
+	c.RequireInviteId()
+	if c.Err != nil {
+		return
+	}
+
+	if team, err := app.GetTeamByInviteId(c.Params.InviteId); err != nil {
+		c.Err = err
+		return
+	} else {
+		if !(team.Type == model.TEAM_OPEN) {
+			c.Err = model.NewAppError("getInviteInfo", "api.team.get_invite_info.not_open_team", nil, "id="+c.Params.InviteId, http.StatusForbidden)
+			return
+		}
+
+		result := map[string]string{}
+		result["display_name"] = team.DisplayName
+		result["description"] = team.Description
+		result["name"] = team.Name
+		result["id"] = team.Id
+		w.Write([]byte(model.MapToJson(result)))
+	}
 }

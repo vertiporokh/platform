@@ -1,10 +1,8 @@
 // Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
-import AppDispatcher from 'dispatcher/app_dispatcher.jsx';
 import TeamMembersModal from './team_members_modal.jsx';
 import ToggleModalButton from './toggle_modal_button.jsx';
-import UserSettingsModal from './user_settings/user_settings_modal.jsx';
 import AboutBuildModal from './about_build_modal.jsx';
 import AddUsersToTeam from 'components/add_users_to_team';
 
@@ -20,7 +18,6 @@ import * as UserAgent from 'utils/user_agent.jsx';
 import * as Utils from 'utils/utils.jsx';
 import {Constants, WebrtcActionTypes} from 'utils/constants.jsx';
 
-const ActionTypes = Constants.ActionTypes;
 const Preferences = Constants.Preferences;
 const TutorialSteps = Constants.TutorialSteps;
 
@@ -46,7 +43,6 @@ export default class SidebarRightMenu extends React.Component {
         this.getFlagged = this.getFlagged.bind(this);
 
         const state = this.getStateFromStores();
-        state.showUserSettingsModal = false;
         state.showAboutModal = false;
         state.showAddUsersToTeamModal = false;
 
@@ -145,20 +141,7 @@ export default class SidebarRightMenu extends React.Component {
 
     hideSidebars() {
         if (Utils.isMobile()) {
-            AppDispatcher.handleServerAction({
-                type: ActionTypes.RECEIVED_SEARCH,
-                results: null
-            });
-
-            AppDispatcher.handleServerAction({
-                type: ActionTypes.RECEIVED_POST_SELECTED,
-                postId: null
-            });
-
-            document.querySelector('.app__body .inner-wrap').classList.remove('move--right', 'move--left', 'move--left-small');
-            document.querySelector('.app__body .sidebar--left').classList.remove('move--right');
-            document.querySelector('.app__body .sidebar--right').classList.remove('move--left');
-            document.querySelector('.app__body .sidebar--menu').classList.remove('move--left');
+            GlobalActions.toggleSideBarRightMenuAction();
         }
     }
 
@@ -298,6 +281,25 @@ export default class SidebarRightMenu extends React.Component {
             </li>
         );
 
+        const leaveTeam = (
+            <li key='leaveTeam_li'>
+                <a
+                    id='leaveTeam'
+                    href='#'
+                    onClick={GlobalActions.showLeaveTeamModal}
+                >
+                    <span
+                        className='icon'
+                        dangerouslySetInnerHTML={{__html: Constants.LEAVE_TEAM_SVG}}
+                    />
+                    <FormattedMessage
+                        id='navbar_dropdown.leave'
+                        defaultMessage='Leave Team'
+                    />
+                </a>
+            </li>
+        );
+
         if (isAdmin) {
             teamSettingsLink = (
                 <li>
@@ -430,7 +432,7 @@ export default class SidebarRightMenu extends React.Component {
         }
 
         let teamDivider = null;
-        if (teamSettingsLink || manageLink || joinAnotherTeamLink || createTeam) {
+        if (teamSettingsLink || manageLink || joinAnotherTeamLink || createTeam || leaveTeam) {
             teamDivider = <li className='divider'/>;
         }
 
@@ -484,7 +486,7 @@ export default class SidebarRightMenu extends React.Component {
                         <li>
                             <a
                                 href='#'
-                                onClick={() => this.setState({showUserSettingsModal: true})}
+                                onClick={() => GlobalActions.showAccountSettingsModal()}
                             >
                                 <i className='icon fa fa-cog'/>
                                 <FormattedMessage
@@ -502,6 +504,7 @@ export default class SidebarRightMenu extends React.Component {
                         {manageLink}
                         {createTeam}
                         {joinAnotherTeamLink}
+                        {leaveTeam}
                         {consoleDivider}
                         {consoleLink}
                         <li className='divider'/>
@@ -535,10 +538,6 @@ export default class SidebarRightMenu extends React.Component {
                         </li>
                     </ul>
                 </div>
-                <UserSettingsModal
-                    show={this.state.showUserSettingsModal}
-                    onModalDismissed={() => this.setState({showUserSettingsModal: false})}
-                />
                 <AboutBuildModal
                     show={this.state.showAboutModal}
                     onModalDismissed={this.aboutModalDismissed}

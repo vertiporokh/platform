@@ -695,7 +695,8 @@ func TestUserCreateImage(t *testing.T) {
 		secretKey := utils.Cfg.FileSettings.AmazonS3SecretAccessKey
 		secure := *utils.Cfg.FileSettings.AmazonS3SSL
 		signV2 := *utils.Cfg.FileSettings.AmazonS3SignV2
-		s3Clnt, err := s3New(endpoint, accessKey, secretKey, secure, signV2)
+		region := utils.Cfg.FileSettings.AmazonS3Region
+		s3Clnt, err := s3New(endpoint, accessKey, secretKey, secure, signV2, region)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -800,7 +801,8 @@ func TestUserUploadProfileImage(t *testing.T) {
 			secretKey := utils.Cfg.FileSettings.AmazonS3SecretAccessKey
 			secure := *utils.Cfg.FileSettings.AmazonS3SSL
 			signV2 := *utils.Cfg.FileSettings.AmazonS3SignV2
-			s3Clnt, err := s3New(endpoint, accessKey, secretKey, secure, signV2)
+			region := utils.Cfg.FileSettings.AmazonS3Region
+			s3Clnt, err := s3New(endpoint, accessKey, secretKey, secure, signV2, region)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1232,7 +1234,7 @@ func TestUserPermDelete(t *testing.T) {
 	Client.Login(user1.Email, "passwd1")
 	Client.SetTeamId(team.Id)
 
-	channel1 := &model.Channel{DisplayName: "TestGetPosts", Name: "a" + model.NewId() + "a", Type: model.CHANNEL_OPEN, TeamId: team.Id}
+	channel1 := &model.Channel{DisplayName: "TestGetPosts", Name: "zz" + model.NewId() + "a", Type: model.CHANNEL_OPEN, TeamId: team.Id}
 	channel1 = Client.Must(Client.CreateChannel(channel1)).Data.(*model.Channel)
 
 	post1 := &model.Post{ChannelId: channel1.Id, Message: "search for post1"}

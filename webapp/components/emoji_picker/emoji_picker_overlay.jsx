@@ -13,7 +13,17 @@ export default class EmojiPickerOverlay extends React.PureComponent {
         container: PropTypes.func,
         target: PropTypes.func.isRequired,
         onEmojiClick: PropTypes.func.isRequired,
-        onHide: PropTypes.func.isRequired
+        onHide: PropTypes.func.isRequired,
+        rightOffset: PropTypes.number,
+        topOffset: PropTypes.number,
+        spaceRequiredAbove: PropTypes.number,
+        spaceRequiredBelow: PropTypes.number
+    }
+
+    // Reasonable defaults calculated from from the center channel
+    static defaultProps = {
+        spaceRequiredAbove: 422,
+        spaceRequiredBelow: 436
     }
 
     constructor(props) {
@@ -26,15 +36,12 @@ export default class EmojiPickerOverlay extends React.PureComponent {
 
     componentWillUpdate(nextProps) {
         if (nextProps.show && !this.props.show) {
-            const spaceRequiredAbove = 422;
-            const spaceRequiredBelow = 436;
-
             const targetBounds = nextProps.target().getBoundingClientRect();
 
             let placement;
-            if (targetBounds.top > spaceRequiredAbove) {
+            if (targetBounds.top > nextProps.spaceRequiredAbove) {
                 placement = 'top';
-            } else if (window.innerHeight - targetBounds.bottom > spaceRequiredBelow) {
+            } else if (window.innerHeight - targetBounds.bottom > nextProps.spaceRequiredBelow) {
                 placement = 'bottom';
             } else {
                 placement = 'left';
@@ -55,7 +62,11 @@ export default class EmojiPickerOverlay extends React.PureComponent {
                 target={this.props.target}
                 animation={false}
             >
-                <EmojiPicker onEmojiClick={this.props.onEmojiClick}/>
+                <EmojiPicker
+                    onEmojiClick={this.props.onEmojiClick}
+                    rightOffset={this.props.rightOffset}
+                    topOffset={this.props.topOffset}
+                />
             </Overlay>
         );
     }

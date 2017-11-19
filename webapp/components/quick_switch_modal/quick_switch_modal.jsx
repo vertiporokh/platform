@@ -272,7 +272,12 @@ export default class QuickSwitchModal extends React.PureComponent {
 
         let help;
         if (Utils.isMobile()) {
-            help = null;
+            help = (
+                <FormattedMessage
+                    id='quick_switch_modal.help_mobile'
+                    defaultMessage='Type to find a channel.'
+                />
+            );
         } else if (this.props.showTeamSwitcher) {
             help = (
                 <FormattedMessage
@@ -300,7 +305,7 @@ export default class QuickSwitchModal extends React.PureComponent {
                 <Modal.Header closeButton={true}/>
                 <Modal.Body>
                     {header}
-                    <div className='modal__hint hidden-xs'>
+                    <div className='modal__hint'>
                         {help}
                     </div>
                     <SuggestionBox

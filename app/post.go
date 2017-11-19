@@ -48,6 +48,12 @@ func CreatePostAsUser(post *model.Post) (*model.Post, *model.AppError) {
 			if result := <-Srv.Store.Channel().UpdateLastViewedAt([]string{post.ChannelId}, post.UserId); result.Err != nil {
 				l4g.Error(utils.T("api.post.create_post.last_viewed.error"), post.ChannelId, post.UserId, result.Err)
 			}
+
+			if *utils.Cfg.ServiceSettings.EnableChannelViewedMessages {
+				message := model.NewWebSocketEvent(model.WEBSOCKET_EVENT_CHANNEL_VIEWED, "", "", post.UserId, nil)
+				message.Add("channel_id", post.ChannelId)
+				go Publish(message)
+			}
 		}
 
 		return rp, nil
@@ -221,26 +227,21 @@ func SendEphemeralPost(teamId, userId string, post *model.Post) *model.Post {
 }
 
 func UpdatePost(post *model.Post, safeUpdate bool) (*model.Post, *model.AppError) {
-	if utils.IsLicensed {
-		if *utils.Cfg.ServiceSettings.AllowEditPost == model.ALLOW_EDIT_POST_NEVER {
-			err := model.NewAppError("UpdatePost", "api.post.update_post.permissions_denied.app_error", nil, "", http.StatusForbidden)
-			return nil, err
-		}
-	}
-
 	var oldPost *model.Post
 	if result := <-Srv.Store.Post().Get(post.Id); result.Err != nil {
 		return nil, result.Err
 	} else {
 		oldPost = result.Data.(*model.PostList).Posts[post.Id]
 
-		if oldPost == nil {
-			err := model.NewAppError("UpdatePost", "api.post.update_post.find.app_error", nil, "id="+post.Id, http.StatusBadRequest)
-			return nil, err
+		if utils.IsLicensed {
+			if *utils.Cfg.ServiceSettings.AllowEditPost == model.ALLOW_EDIT_POST_NEVER && post.Message != oldPost.Message {
+				err := model.NewAppError("UpdatePost", "api.post.update_post.permissions_denied.app_error", nil, "", http.StatusForbidden)
+				return nil, err
+			}
 		}
 
-		if oldPost.UserId != post.UserId {
-			err := model.NewAppError("UpdatePost", "api.post.update_post.permissions.app_error", nil, "oldUserId="+oldPost.UserId, http.StatusBadRequest)
+		if oldPost == nil {
+			err := model.NewAppError("UpdatePost", "api.post.update_post.find.app_error", nil, "id="+post.Id, http.StatusBadRequest)
 			return nil, err
 		}
 
@@ -255,7 +256,7 @@ func UpdatePost(post *model.Post, safeUpdate bool) (*model.Post, *model.AppError
 		}
 
 		if utils.IsLicensed {
-			if *utils.Cfg.ServiceSettings.AllowEditPost == model.ALLOW_EDIT_POST_TIME_LIMIT && model.GetMillis() > oldPost.CreateAt+int64(*utils.Cfg.ServiceSettings.PostEditTimeLimit*1000) {
+			if *utils.Cfg.ServiceSettings.AllowEditPost == model.ALLOW_EDIT_POST_TIME_LIMIT && model.GetMillis() > oldPost.CreateAt+int64(*utils.Cfg.ServiceSettings.PostEditTimeLimit*1000) && post.Message != oldPost.Message {
 				err := model.NewAppError("UpdatePost", "api.post.update_post.permissions_time_limit.app_error", map[string]interface{}{"timeLimit": *utils.Cfg.ServiceSettings.PostEditTimeLimit}, "", http.StatusBadRequest)
 				return nil, err
 			}
@@ -265,9 +266,11 @@ func UpdatePost(post *model.Post, safeUpdate bool) (*model.Post, *model.AppError
 	newPost := &model.Post{}
 	*newPost = *oldPost
 
-	newPost.Message = post.Message
-	newPost.EditAt = model.GetMillis()
-	newPost.Hashtags, _ = model.ParseHashtags(post.Message)
+	if newPost.Message != post.Message {
+		newPost.Message = post.Message
+		newPost.EditAt = model.GetMillis()
+		newPost.Hashtags, _ = model.ParseHashtags(post.Message)
+	}
 
 	if !safeUpdate {
 		newPost.IsPinned = post.IsPinned

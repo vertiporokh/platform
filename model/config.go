@@ -39,6 +39,10 @@ const (
 	DIRECT_MESSAGE_ANY  = "any"
 	DIRECT_MESSAGE_TEAM = "team"
 
+	SHOW_USERNAME          = "username"
+	SHOW_NICKNAME_FULLNAME = "nickname_full_name"
+	SHOW_FULLNAME          = "full_name"
+
 	PERMISSIONS_ALL           = "all"
 	PERMISSIONS_CHANNEL_ADMIN = "channel_admin"
 	PERMISSIONS_TEAM_ADMIN    = "team_admin"
@@ -111,6 +115,9 @@ const (
 	WEBRTC_SETTINGS_DEFAULT_TURN_URI = ""
 
 	ANALYTICS_SETTINGS_DEFAULT_MAX_USERS_FOR_STATISTICS = 2500
+
+	ANNOUNCEMENT_SETTINGS_DEFAULT_BANNER_COLOR      = "#f2a93b"
+	ANNOUNCEMENT_SETTINGS_DEFAULT_BANNER_TEXT_COLOR = "#333333"
 )
 
 type ServiceSettings struct {
@@ -135,6 +142,7 @@ type ServiceSettings struct {
 	EnableOnlyAdminIntegrations              *bool
 	EnablePostUsernameOverride               bool
 	EnablePostIconOverride                   bool
+	EnableAPIv3                              *bool
 	EnableLinkPreviews                       *bool
 	EnableTesting                            bool
 	EnableDeveloper                          *bool
@@ -151,6 +159,7 @@ type ServiceSettings struct {
 	WebsocketPort                            *int
 	WebserverMode                            *string
 	EnableCustomEmoji                        *bool
+	EnableEmojiPicker                        *bool
 	RestrictCustomEmojiCreation              *string
 	RestrictPostDelete                       *string
 	AllowEditPost                            *string
@@ -158,14 +167,20 @@ type ServiceSettings struct {
 	TimeBetweenUserTypingUpdatesMilliseconds *int64
 	EnablePostSearch                         *bool
 	EnableUserTypingMessages                 *bool
+	EnableChannelViewedMessages              *bool
 	EnableUserStatuses                       *bool
 	ClusterLogTimeoutMilliseconds            *int
 }
 
 type ClusterSettings struct {
-	Enable                 *bool
-	InterNodeListenAddress *string
-	InterNodeUrls          []string
+	Enable                *bool
+	ClusterName           *string
+	OverrideHostname      *string
+	UseIpAddress          *bool
+	UseExperimentalGossip *bool
+	ReadOnlyConfig        *bool
+	GossipPort            *int
+	StreamingPort         *int
 }
 
 type MetricsSettings struct {
@@ -226,12 +241,6 @@ type FileSettings struct {
 	Directory               string
 	EnablePublicLink        bool
 	PublicLinkSalt          *string
-	ThumbnailWidth          int
-	ThumbnailHeight         int
-	PreviewWidth            int
-	PreviewHeight           int
-	ProfileWidth            int
-	ProfileHeight           int
 	InitialFont             string
 	AmazonS3AccessKeyId     string
 	AmazonS3SecretAccessKey string
@@ -322,6 +331,7 @@ type TeamSettings struct {
 	UserStatusAwayTimeout               *int64
 	MaxChannelsPerTeam                  *int64
 	MaxNotificationsPerChannel          *int64
+	TeammateNameDisplay                 *string
 }
 
 type LdapSettings struct {
@@ -503,11 +513,6 @@ func (o *Config) SetDefaults() {
 		o.FileSettings.AmazonS3Endpoint = "s3.amazonaws.com"
 	}
 
-	if o.FileSettings.AmazonS3Region == "" {
-		// Defaults to "us-east-1" region.
-		o.FileSettings.AmazonS3Region = "us-east-1"
-	}
-
 	if o.FileSettings.AmazonS3SSL == nil {
 		o.FileSettings.AmazonS3SSL = new(bool)
 		*o.FileSettings.AmazonS3SSL = true // Secure by default.
@@ -553,6 +558,11 @@ func (o *Config) SetDefaults() {
 
 	if o.ServiceSettings.LicenseFileLocation == nil {
 		o.ServiceSettings.LicenseFileLocation = new(string)
+	}
+
+	if o.ServiceSettings.EnableAPIv3 == nil {
+		o.ServiceSettings.EnableAPIv3 = new(bool)
+		*o.ServiceSettings.EnableAPIv3 = true
 	}
 
 	if o.ServiceSettings.EnableLinkPreviews == nil {
@@ -846,12 +856,12 @@ func (o *Config) SetDefaults() {
 
 	if o.AnnouncementSettings.BannerColor == nil {
 		o.AnnouncementSettings.BannerColor = new(string)
-		*o.AnnouncementSettings.BannerColor = "#f2a93b"
+		*o.AnnouncementSettings.BannerColor = ANNOUNCEMENT_SETTINGS_DEFAULT_BANNER_COLOR
 	}
 
 	if o.AnnouncementSettings.BannerTextColor == nil {
 		o.AnnouncementSettings.BannerTextColor = new(string)
-		*o.AnnouncementSettings.BannerTextColor = "#333333"
+		*o.AnnouncementSettings.BannerTextColor = ANNOUNCEMENT_SETTINGS_DEFAULT_BANNER_TEXT_COLOR
 	}
 
 	if o.AnnouncementSettings.AllowBannerDismissal == nil {
@@ -1013,7 +1023,12 @@ func (o *Config) SetDefaults() {
 
 	if o.ServiceSettings.EnableCustomEmoji == nil {
 		o.ServiceSettings.EnableCustomEmoji = new(bool)
-		*o.ServiceSettings.EnableCustomEmoji = true
+		*o.ServiceSettings.EnableCustomEmoji = false
+	}
+
+	if o.ServiceSettings.EnableEmojiPicker == nil {
+		o.ServiceSettings.EnableEmojiPicker = new(bool)
+		*o.ServiceSettings.EnableEmojiPicker = true
 	}
 
 	if o.ServiceSettings.RestrictCustomEmojiCreation == nil {
@@ -1036,18 +1051,44 @@ func (o *Config) SetDefaults() {
 		*o.ServiceSettings.PostEditTimeLimit = 300
 	}
 
-	if o.ClusterSettings.InterNodeListenAddress == nil {
-		o.ClusterSettings.InterNodeListenAddress = new(string)
-		*o.ClusterSettings.InterNodeListenAddress = ":8075"
-	}
-
 	if o.ClusterSettings.Enable == nil {
 		o.ClusterSettings.Enable = new(bool)
 		*o.ClusterSettings.Enable = false
 	}
 
-	if o.ClusterSettings.InterNodeUrls == nil {
-		o.ClusterSettings.InterNodeUrls = []string{}
+	if o.ClusterSettings.ClusterName == nil {
+		o.ClusterSettings.ClusterName = new(string)
+		*o.ClusterSettings.ClusterName = ""
+	}
+
+	if o.ClusterSettings.OverrideHostname == nil {
+		o.ClusterSettings.OverrideHostname = new(string)
+		*o.ClusterSettings.OverrideHostname = ""
+	}
+
+	if o.ClusterSettings.UseIpAddress == nil {
+		o.ClusterSettings.UseIpAddress = new(bool)
+		*o.ClusterSettings.UseIpAddress = true
+	}
+
+	if o.ClusterSettings.UseExperimentalGossip == nil {
+		o.ClusterSettings.UseExperimentalGossip = new(bool)
+		*o.ClusterSettings.UseExperimentalGossip = false
+	}
+
+	if o.ClusterSettings.ReadOnlyConfig == nil {
+		o.ClusterSettings.ReadOnlyConfig = new(bool)
+		*o.ClusterSettings.ReadOnlyConfig = true
+	}
+
+	if o.ClusterSettings.GossipPort == nil {
+		o.ClusterSettings.GossipPort = new(int)
+		*o.ClusterSettings.GossipPort = 8074
+	}
+
+	if o.ClusterSettings.StreamingPort == nil {
+		o.ClusterSettings.StreamingPort = new(int)
+		*o.ClusterSettings.StreamingPort = 8075
 	}
 
 	if o.MetricsSettings.ListenAddress == nil {
@@ -1185,6 +1226,15 @@ func (o *Config) SetDefaults() {
 		*o.SamlSettings.LocaleAttribute = SAML_SETTINGS_DEFAULT_LOCALE_ATTRIBUTE
 	}
 
+	if o.TeamSettings.TeammateNameDisplay == nil {
+		o.TeamSettings.TeammateNameDisplay = new(string)
+		*o.TeamSettings.TeammateNameDisplay = SHOW_USERNAME
+
+		if *o.SamlSettings.Enable || *o.LdapSettings.Enable {
+			*o.TeamSettings.TeammateNameDisplay = SHOW_FULLNAME
+		}
+	}
+
 	if o.NativeAppSettings.AppDownloadLink == nil {
 		o.NativeAppSettings.AppDownloadLink = new(string)
 		*o.NativeAppSettings.AppDownloadLink = NATIVEAPP_SETTINGS_DEFAULT_APP_DOWNLOAD_LINK
@@ -1275,6 +1325,11 @@ func (o *Config) SetDefaults() {
 		*o.ServiceSettings.EnableUserTypingMessages = true
 	}
 
+	if o.ServiceSettings.EnableChannelViewedMessages == nil {
+		o.ServiceSettings.EnableChannelViewedMessages = new(bool)
+		*o.ServiceSettings.EnableChannelViewedMessages = true
+	}
+
 	if o.ServiceSettings.EnableUserStatuses == nil {
 		o.ServiceSettings.EnableUserStatuses = new(bool)
 		*o.ServiceSettings.EnableUserStatuses = true
@@ -1363,6 +1418,10 @@ func (o *Config) IsValid() *AppError {
 		return NewLocAppError("Config.IsValid", "model.config.is_valid.restrict_direct_message.app_error", nil, "")
 	}
 
+	if !(*o.TeamSettings.TeammateNameDisplay == SHOW_FULLNAME || *o.TeamSettings.TeammateNameDisplay == SHOW_NICKNAME_FULLNAME || *o.TeamSettings.TeammateNameDisplay == SHOW_USERNAME) {
+		return NewLocAppError("Config.IsValid", "model.config.is_valid.teammate_name_display.app_error", nil, "")
+	}
+
 	if len(o.SqlSettings.AtRestEncryptKey) < 32 {
 		return NewLocAppError("Config.IsValid", "model.config.is_valid.encrypt_sql.app_error", nil, "")
 	}
@@ -1393,30 +1452,6 @@ func (o *Config) IsValid() *AppError {
 
 	if !(o.FileSettings.DriverName == IMAGE_DRIVER_LOCAL || o.FileSettings.DriverName == IMAGE_DRIVER_S3) {
 		return NewLocAppError("Config.IsValid", "model.config.is_valid.file_driver.app_error", nil, "")
-	}
-
-	if o.FileSettings.PreviewHeight < 0 {
-		return NewLocAppError("Config.IsValid", "model.config.is_valid.file_preview_height.app_error", nil, "")
-	}
-
-	if o.FileSettings.PreviewWidth <= 0 {
-		return NewLocAppError("Config.IsValid", "model.config.is_valid.file_preview_width.app_error", nil, "")
-	}
-
-	if o.FileSettings.ProfileHeight <= 0 {
-		return NewLocAppError("Config.IsValid", "model.config.is_valid.file_profile_height.app_error", nil, "")
-	}
-
-	if o.FileSettings.ProfileWidth <= 0 {
-		return NewLocAppError("Config.IsValid", "model.config.is_valid.file_profile_width.app_error", nil, "")
-	}
-
-	if o.FileSettings.ThumbnailHeight <= 0 {
-		return NewLocAppError("Config.IsValid", "model.config.is_valid.file_thumb_height.app_error", nil, "")
-	}
-
-	if o.FileSettings.ThumbnailWidth <= 0 {
-		return NewLocAppError("Config.IsValid", "model.config.is_valid.file_thumb_width.app_error", nil, "")
 	}
 
 	if len(*o.FileSettings.PublicLinkSalt) < 32 {

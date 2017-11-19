@@ -162,7 +162,7 @@ func TestTeamStoreSearchAll(t *testing.T) {
 
 	o1 := model.Team{}
 	o1.DisplayName = "ADisplayName" + model.NewId()
-	o1.Name = "a" + model.NewId() + "a"
+	o1.Name = "zz" + model.NewId() + "a"
 	o1.Email = model.NewId() + "@nowhere.com"
 	o1.Type = model.TEAM_OPEN
 
@@ -216,11 +216,23 @@ func TestTeamStoreSearchOpen(t *testing.T) {
 
 	o1 := model.Team{}
 	o1.DisplayName = "ADisplayName" + model.NewId()
-	o1.Name = "a" + model.NewId() + "a"
+	o1.Name = "zz" + model.NewId() + "a"
 	o1.Email = model.NewId() + "@nowhere.com"
 	o1.Type = model.TEAM_OPEN
+	o1.AllowOpenInvite = true
 
 	if err := (<-store.Team().Save(&o1)).Err; err != nil {
+		t.Fatal(err)
+	}
+
+	o2 := model.Team{}
+	o2.DisplayName = "ADisplayName" + model.NewId()
+	o2.Name = "zz" + model.NewId() + "a"
+	o2.Email = model.NewId() + "@nowhere.com"
+	o2.Type = model.TEAM_OPEN
+	o2.AllowOpenInvite = false
+
+	if err := (<-store.Team().Save(&o2)).Err; err != nil {
 		t.Fatal(err)
 	}
 
@@ -229,6 +241,7 @@ func TestTeamStoreSearchOpen(t *testing.T) {
 	p2.Name = "b" + model.NewId() + "b"
 	p2.Email = model.NewId() + "@nowhere.com"
 	p2.Type = model.TEAM_INVITE
+	p2.AllowOpenInvite = true
 
 	if err := (<-store.Team().Save(&p2)).Err; err != nil {
 		t.Fatal(err)
@@ -279,6 +292,14 @@ func TestTeamStoreSearchOpen(t *testing.T) {
 	if len(r1.Data.([]*model.Team)) != 0 {
 		t.Fatal("should have not returned a team")
 	}
+
+	r1 = <-store.Team().SearchOpen(o2.DisplayName)
+	if r1.Err != nil {
+		t.Fatal(r1.Err)
+	}
+	if len(r1.Data.([]*model.Team)) != 0 {
+		t.Fatal("should have not returned a team")
+	}
 }
 
 func TestTeamStoreGetByIniviteId(t *testing.T) {
@@ -297,7 +318,7 @@ func TestTeamStoreGetByIniviteId(t *testing.T) {
 
 	o2 := model.Team{}
 	o2.DisplayName = "DisplayName"
-	o2.Name = "a" + model.NewId() + "b"
+	o2.Name = "zz" + model.NewId() + "b"
 	o2.Email = model.NewId() + "@nowhere.com"
 	o2.Type = model.TEAM_OPEN
 
@@ -371,7 +392,7 @@ func TestAllTeamListing(t *testing.T) {
 
 	o2 := model.Team{}
 	o2.DisplayName = "DisplayName"
-	o2.Name = "a" + model.NewId() + "b"
+	o2.Name = "zz" + model.NewId() + "b"
 	o2.Email = model.NewId() + "@nowhere.com"
 	o2.Type = model.TEAM_OPEN
 	Must(store.Team().Save(&o2))
@@ -400,7 +421,7 @@ func TestDelete(t *testing.T) {
 
 	o2 := model.Team{}
 	o2.DisplayName = "DisplayName"
-	o2.Name = "a" + model.NewId() + "b"
+	o2.Name = "zz" + model.NewId() + "b"
 	o2.Email = model.NewId() + "@nowhere.com"
 	o2.Type = model.TEAM_OPEN
 	Must(store.Team().Save(&o2))
@@ -644,7 +665,24 @@ func TestSaveTeamMemberMaxMembers(t *testing.T) {
 	if result := <-store.Team().GetTotalMemberCount(team.Id); result.Err != nil {
 		t.Fatal(result.Err)
 	} else if count := result.Data.(int64); int(count) != utils.Cfg.TeamSettings.MaxUsersPerTeam {
-		t.Fatalf("should still have 5 team members again, had %v instead", count)
+		t.Fatalf("should have 5 team members again, had %v instead", count)
+	}
+
+	// Deactivating a user should make them stop counting against max members
+	user2 := Must(store.User().Get(userIds[1])).(*model.User)
+	user2.DeleteAt = 1234
+	Must(store.User().Update(user2, true))
+
+	newUserId2 := Must(store.User().Save(&model.User{
+		Username: model.NewId(),
+		Email:    model.NewId(),
+	})).(*model.User).Id
+	if result := <-store.Team().SaveMember(&model.TeamMember{TeamId: team.Id, UserId: newUserId2}); result.Err != nil {
+		t.Fatal("should've been able to save new member after deleting one", result.Err)
+	} else {
+		defer func(userId string) {
+			<-store.Team().RemoveMember(team.Id, userId)
+		}(newUserId2)
 	}
 }
 

@@ -53,16 +53,25 @@ const (
 	RotatedCCWMirrored = 7
 	RotatedCW          = 8
 
-	MaxImageSize = 6048 * 4032 // 24 megapixels, roughly 36MB as a raw image
+	MaxImageSize                 = 6048 * 4032 // 24 megapixels, roughly 36MB as a raw image
+	IMAGE_THUMBNAIL_PIXEL_WIDTH  = 120
+	IMAGE_THUMBNAIL_PIXEL_HEIGHT = 100
+	IMAGE_PREVIEW_PIXEL_WIDTH    = 1024
 )
 
 // Similar to s3.New() but allows initialization of signature v2 or signature v4 client.
 // If signV2 input is false, function always returns signature v4.
-func s3New(endpoint, accessKey, secretKey string, secure bool, signV2 bool) (*s3.Client, error) {
+//
+// Additionally this function also takes a user defined region, if set
+// disables automatic region lookup.
+func s3New(endpoint, accessKey, secretKey string, secure bool, signV2 bool, region string) (*s3.Client, error) {
 	if signV2 {
 		return s3.NewV2(endpoint, accessKey, secretKey, secure)
 	}
-	return s3.NewV4(endpoint, accessKey, secretKey, secure)
+	// Region can only be configured if using signature v4, use
+	// mattermost/platform-v4.1. For v2 signature regions are
+	// not quite meaningful and should work fine without.
+	return s3.NewWithRegion(endpoint, accessKey, secretKey, secure, region)
 }
 
 func ReadFile(path string) ([]byte, *model.AppError) {
@@ -72,7 +81,8 @@ func ReadFile(path string) ([]byte, *model.AppError) {
 		secretKey := utils.Cfg.FileSettings.AmazonS3SecretAccessKey
 		secure := *utils.Cfg.FileSettings.AmazonS3SSL
 		signV2 := *utils.Cfg.FileSettings.AmazonS3SignV2
-		s3Clnt, err := s3New(endpoint, accessKey, secretKey, secure, signV2)
+		region := utils.Cfg.FileSettings.AmazonS3Region
+		s3Clnt, err := s3New(endpoint, accessKey, secretKey, secure, signV2, region)
 		if err != nil {
 			return nil, model.NewLocAppError("ReadFile", "api.file.read_file.s3.app_error", nil, err.Error())
 		}
@@ -105,7 +115,8 @@ func MoveFile(oldPath, newPath string) *model.AppError {
 		secretKey := utils.Cfg.FileSettings.AmazonS3SecretAccessKey
 		secure := *utils.Cfg.FileSettings.AmazonS3SSL
 		signV2 := *utils.Cfg.FileSettings.AmazonS3SignV2
-		s3Clnt, err := s3New(endpoint, accessKey, secretKey, secure, signV2)
+		region := utils.Cfg.FileSettings.AmazonS3Region
+		s3Clnt, err := s3New(endpoint, accessKey, secretKey, secure, signV2, region)
 		if err != nil {
 			return model.NewLocAppError("moveFile", "api.file.write_file.s3.app_error", nil, err.Error())
 		}
@@ -140,7 +151,8 @@ func WriteFile(f []byte, path string) *model.AppError {
 		secretKey := utils.Cfg.FileSettings.AmazonS3SecretAccessKey
 		secure := *utils.Cfg.FileSettings.AmazonS3SSL
 		signV2 := *utils.Cfg.FileSettings.AmazonS3SignV2
-		s3Clnt, err := s3New(endpoint, accessKey, secretKey, secure, signV2)
+		region := utils.Cfg.FileSettings.AmazonS3Region
+		s3Clnt, err := s3New(endpoint, accessKey, secretKey, secure, signV2, region)
 		if err != nil {
 			return model.NewLocAppError("WriteFile", "api.file.write_file.s3.app_error", nil, err.Error())
 		}
@@ -553,18 +565,18 @@ func getImageOrientation(input io.Reader) (int, error) {
 }
 
 func generateThumbnailImage(img image.Image, thumbnailPath string, width int, height int) {
-	thumbWidth := float64(utils.Cfg.FileSettings.ThumbnailWidth)
-	thumbHeight := float64(utils.Cfg.FileSettings.ThumbnailHeight)
+	thumbWidth := float64(IMAGE_THUMBNAIL_PIXEL_WIDTH)
+	thumbHeight := float64(IMAGE_THUMBNAIL_PIXEL_HEIGHT)
 	imgWidth := float64(width)
 	imgHeight := float64(height)
 
 	var thumbnail image.Image
-	if imgHeight < thumbHeight && imgWidth < thumbWidth {
+	if imgHeight < IMAGE_THUMBNAIL_PIXEL_HEIGHT && imgWidth < thumbWidth {
 		thumbnail = img
 	} else if imgHeight/imgWidth < thumbHeight/thumbWidth {
-		thumbnail = imaging.Resize(img, 0, utils.Cfg.FileSettings.ThumbnailHeight, imaging.Lanczos)
+		thumbnail = imaging.Resize(img, 0, IMAGE_THUMBNAIL_PIXEL_HEIGHT, imaging.Lanczos)
 	} else {
-		thumbnail = imaging.Resize(img, utils.Cfg.FileSettings.ThumbnailWidth, 0, imaging.Lanczos)
+		thumbnail = imaging.Resize(img, IMAGE_THUMBNAIL_PIXEL_WIDTH, 0, imaging.Lanczos)
 	}
 
 	buf := new(bytes.Buffer)
@@ -581,8 +593,9 @@ func generateThumbnailImage(img image.Image, thumbnailPath string, width int, he
 
 func generatePreviewImage(img image.Image, previewPath string, width int) {
 	var preview image.Image
-	if width > int(utils.Cfg.FileSettings.PreviewWidth) {
-		preview = imaging.Resize(img, utils.Cfg.FileSettings.PreviewWidth, utils.Cfg.FileSettings.PreviewHeight, imaging.Lanczos)
+
+	if width > IMAGE_PREVIEW_PIXEL_WIDTH {
+		preview = imaging.Resize(img, IMAGE_PREVIEW_PIXEL_WIDTH, 0, imaging.Lanczos)
 	} else {
 		preview = img
 	}

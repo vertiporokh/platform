@@ -42,30 +42,31 @@
 
 .status {
     display: inline-block;
-    margin-right: 6px;
+    margin: 0 7px 0 1px;
     position: relative;
-    top: 1px;
-    width: 12px;
+    top: 2px;
+    width: 15px;
 
     &.status--group {
         border-radius: 2px;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 600;
-        height: 16px;
+        height: 15px;
         left: 1px;
-        line-height: 15px;
-        margin-left: -3px;
+        line-height: 14px;
+        margin: 0 9px 0 -1px;
         text-align: center;
-        top: -1px;
-        width: 16px;
+        top: -2px;
+        width: 15px;
 
         .mentions__name & {
-            height: 20px;
+            height: 18px;
             left: 0;
-            line-height: 20px;
+            line-height: 18px;
             margin-left: 0;
+            margin-right: 6px;
             text-align: center;
-            width: 20px;
+            width: 17px;
         }
     }
 

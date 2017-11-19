@@ -343,7 +343,12 @@ func LoadConfig(fileName string) {
 	}
 
 	if err := ValidateLocales(&config); err != nil {
-		panic(T(err.Id))
+		cfgMutex.Unlock()
+		if err := SaveConfig(CfgFileName, &config); err != nil {
+			err.Translate(T)
+			l4g.Warn(err.Error())
+		}
+		cfgMutex.Lock()
 	}
 
 	if err := ValidateLdapFilter(&config); err != nil {
@@ -411,6 +416,7 @@ func getClientConfig(c *model.Config) map[string]string {
 	props["RestrictPublicChannelDeletion"] = *c.TeamSettings.RestrictPublicChannelDeletion
 	props["RestrictPrivateChannelDeletion"] = *c.TeamSettings.RestrictPrivateChannelDeletion
 	props["RestrictPrivateChannelManageMembers"] = *c.TeamSettings.RestrictPrivateChannelManageMembers
+	props["TeammateNameDisplay"] = *c.TeamSettings.TeammateNameDisplay
 
 	props["EnableOAuthServiceProvider"] = strconv.FormatBool(c.ServiceSettings.EnableOAuthServiceProvider)
 	props["GoogleDeveloperKey"] = c.ServiceSettings.GoogleDeveloperKey
@@ -452,8 +458,6 @@ func getClientConfig(c *model.Config) map[string]string {
 
 	props["EnableFileAttachments"] = strconv.FormatBool(*c.FileSettings.EnableFileAttachments)
 	props["EnablePublicLink"] = strconv.FormatBool(c.FileSettings.EnablePublicLink)
-	props["ProfileHeight"] = fmt.Sprintf("%v", c.FileSettings.ProfileHeight)
-	props["ProfileWidth"] = fmt.Sprintf("%v", c.FileSettings.ProfileWidth)
 
 	props["WebsocketPort"] = fmt.Sprintf("%v", *c.ServiceSettings.WebsocketPort)
 	props["WebsocketSecurePort"] = fmt.Sprintf("%v", *c.ServiceSettings.WebsocketSecurePort)
@@ -463,6 +467,7 @@ func getClientConfig(c *model.Config) map[string]string {
 	props["SQLDriverName"] = c.SqlSettings.DriverName
 
 	props["EnableCustomEmoji"] = strconv.FormatBool(*c.ServiceSettings.EnableCustomEmoji)
+	props["EnableEmojiPicker"] = strconv.FormatBool(*c.ServiceSettings.EnableEmojiPicker)
 	props["RestrictCustomEmojiCreation"] = *c.ServiceSettings.RestrictCustomEmojiCreation
 	props["MaxFileSize"] = strconv.FormatInt(*c.FileSettings.MaxFileSize, 10)
 
@@ -475,6 +480,7 @@ func getClientConfig(c *model.Config) map[string]string {
 	props["MaxNotificationsPerChannel"] = strconv.FormatInt(*c.TeamSettings.MaxNotificationsPerChannel, 10)
 	props["TimeBetweenUserTypingUpdatesMilliseconds"] = strconv.FormatInt(*c.ServiceSettings.TimeBetweenUserTypingUpdatesMilliseconds, 10)
 	props["EnableUserTypingMessages"] = strconv.FormatBool(*c.ServiceSettings.EnableUserTypingMessages)
+	props["EnableChannelViewedMessages"] = strconv.FormatBool(*c.ServiceSettings.EnableChannelViewedMessages)
 
 	props["DiagnosticId"] = CfgDiagnosticId
 	props["DiagnosticsEnabled"] = strconv.FormatBool(*c.LogSettings.EnableDiagnostics)
@@ -563,26 +569,44 @@ func ValidateLdapFilter(cfg *model.Config) *model.AppError {
 }
 
 func ValidateLocales(cfg *model.Config) *model.AppError {
+	var err *model.AppError
 	locales := GetSupportedLocales()
 	if _, ok := locales[*cfg.LocalizationSettings.DefaultServerLocale]; !ok {
-		return model.NewLocAppError("ValidateLocales", "utils.config.supported_server_locale.app_error", nil, "")
+		*cfg.LocalizationSettings.DefaultServerLocale = model.DEFAULT_LOCALE
+		err = model.NewLocAppError("ValidateLocales", "utils.config.supported_server_locale.app_error", nil, "")
 	}
 
 	if _, ok := locales[*cfg.LocalizationSettings.DefaultClientLocale]; !ok {
-		return model.NewLocAppError("ValidateLocales", "utils.config.supported_client_locale.app_error", nil, "")
+		*cfg.LocalizationSettings.DefaultClientLocale = model.DEFAULT_LOCALE
+		err = model.NewLocAppError("ValidateLocales", "utils.config.supported_client_locale.app_error", nil, "")
 	}
 
 	if len(*cfg.LocalizationSettings.AvailableLocales) > 0 {
+		isDefaultClientLocaleInAvailableLocales := false
 		for _, word := range strings.Split(*cfg.LocalizationSettings.AvailableLocales, ",") {
+			if _, ok := locales[word]; !ok {
+				*cfg.LocalizationSettings.AvailableLocales = ""
+				isDefaultClientLocaleInAvailableLocales = true
+				err = model.NewLocAppError("ValidateLocales", "utils.config.supported_available_locales.app_error", nil, "")
+				break
+			}
+
 			if word == *cfg.LocalizationSettings.DefaultClientLocale {
-				return nil
+				isDefaultClientLocaleInAvailableLocales = true
 			}
 		}
 
-		return model.NewLocAppError("ValidateLocales", "utils.config.validate_locale.app_error", nil, "")
+		availableLocales := *cfg.LocalizationSettings.AvailableLocales
+
+		if !isDefaultClientLocaleInAvailableLocales {
+			availableLocales += "," + *cfg.LocalizationSettings.DefaultClientLocale
+			err = model.NewLocAppError("ValidateLocales", "utils.config.add_client_locale.app_error", nil, "")
+		}
+
+		*cfg.LocalizationSettings.AvailableLocales = strings.Join(RemoveDuplicatesFromStringArray(strings.Split(availableLocales, ",")), ",")
 	}
 
-	return nil
+	return err
 }
 
 func Desanitize(cfg *model.Config) {

@@ -201,7 +201,7 @@ export default class AddUsersToTeam extends React.Component {
         const numRemainingText = (
             <FormattedMessage
                 id='multiselect.numPeopleRemaining'
-                defaultMessage='You can add {num, number} more {num, plural, =0 {people} one {person} other {people}}. '
+                defaultMessage='Use ↑↓ to browse, ↵ to select. You can add {num, number} more {num, plural, one {person} other {people}}. '
                 values={{
                     num: MAX_SELECTABLE_VALUES - this.state.values.length
                 }}
@@ -214,6 +214,11 @@ export default class AddUsersToTeam extends React.Component {
                 defaultMessage='Add'
             />
         );
+
+        let users = [];
+        if (this.state.users) {
+            users = this.state.users.filter((user) => user.delete_at === 0);
+        }
 
         return (
             <Modal
@@ -238,7 +243,7 @@ export default class AddUsersToTeam extends React.Component {
                 <Modal.Body>
                     <MultiSelect
                         key='addUsersToTeamKey'
-                        options={this.state.users}
+                        options={users}
                         optionRenderer={this.renderOption}
                         values={this.state.values}
                         valueRenderer={this.renderValue}

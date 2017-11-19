@@ -16,10 +16,11 @@ import (
 
 	l4g "github.com/alecthomas/log4go"
 
+	"image/color/palette"
+
 	"github.com/disintegration/imaging"
 	"github.com/mattermost/platform/model"
 	"github.com/mattermost/platform/utils"
-	"image/color/palette"
 )
 
 const (
@@ -58,12 +59,16 @@ func CreateEmoji(sessionUserId string, emoji *model.Emoji, multiPartImageData *m
 	if result := <-Srv.Store.Emoji().Save(emoji); result.Err != nil {
 		return nil, result.Err
 	} else {
+		message := model.NewWebSocketEvent(model.WEBSOCKET_EVENT_EMOJI_ADDED, "", "", "", nil)
+		message.Add("emoji", emoji.ToJson())
+
+		Publish(message)
 		return result.Data.(*model.Emoji), nil
 	}
 }
 
-func GetEmojiList() ([]*model.Emoji, *model.AppError) {
-	if result := <-Srv.Store.Emoji().GetAll(); result.Err != nil {
+func GetEmojiList(page, perPage int) ([]*model.Emoji, *model.AppError) {
+	if result := <-Srv.Store.Emoji().GetList(page*perPage, perPage); result.Err != nil {
 		return nil, result.Err
 	} else {
 		return result.Data.([]*model.Emoji), nil
@@ -127,8 +132,8 @@ func DeleteEmoji(emoji *model.Emoji) *model.AppError {
 		return err
 	}
 
-	go deleteEmojiImage(emoji.Id)
-	go deleteReactionsForEmoji(emoji.Name)
+	deleteEmojiImage(emoji.Id)
+	deleteReactionsForEmoji(emoji.Name)
 	return nil
 }
 

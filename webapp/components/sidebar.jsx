@@ -18,7 +18,6 @@ import PreferenceStore from 'stores/preference_store.jsx';
 import ModalStore from 'stores/modal_store.jsx';
 
 import AppDispatcher from 'dispatcher/app_dispatcher.jsx';
-import * as AsyncClient from 'utils/async_client.jsx';
 import {sortTeamsByDisplayName} from 'utils/team_utils.jsx';
 import * as Utils from 'utils/utils.jsx';
 import * as ChannelUtils from 'utils/channel_utils.jsx';
@@ -42,8 +41,12 @@ import favicon from 'images/favicon/favicon-16x16.png';
 import redFavicon from 'images/favicon/redfavicon-16x16.png';
 
 import store from 'stores/redux_store.jsx';
+const dispatch = store.dispatch;
+const getState = store.getState;
+
 import {getMyPreferences} from 'mattermost-redux/selectors/entities/preferences';
-import {getUsers} from 'mattermost-redux/selectors/entities/users';
+import {getUsers, getUserStatuses} from 'mattermost-redux/selectors/entities/users';
+import {savePreferences} from 'mattermost-redux/actions/preferences';
 
 export default class Sidebar extends React.Component {
     constructor(props) {
@@ -105,10 +108,12 @@ export default class Sidebar extends React.Component {
         const channels = ChannelStore.getAll();
         const preferences = getMyPreferences(store.getState());
         const profiles = getUsers(store.getState());
+        const statuses = getUserStatuses(store.getState());
         let displayableChannels = {};
         if (!Utils.areObjectsEqual(channels, this.oldChannels) ||
                 !Utils.areObjectsEqual(preferences, this.oldPreferences) ||
-                !Utils.areObjectsEqual(profiles, this.oldProfiles)) {
+                !Utils.areObjectsEqual(profiles, this.oldProfiles) ||
+                !Utils.areObjectsEqual(statuses, this.oldStatuses)) {
             const channelsArray = channels.map((channel) => Object.assign({}, channel));
             displayableChannels = ChannelUtils.buildDisplayableChannelList(channelsArray);
             displayableChannels.favoriteChannels.sort(sortTeamsByDisplayName);
@@ -116,6 +121,7 @@ export default class Sidebar extends React.Component {
         this.oldChannels = channels;
         this.oldPreferences = preferences;
         this.oldProfiles = profiles;
+        this.oldStatuses = statuses;
 
         return {
             activeId: currentChannelId,
@@ -203,7 +209,11 @@ export default class Sidebar extends React.Component {
 
     handleOpenMoreDirectChannelsModal(e) {
         e.preventDefault();
-        this.showMoreDirectChannelsModal();
+        if (this.state.showDirectChannelsModal) {
+            this.hideMoreDirectChannelsModal();
+        } else {
+            this.showMoreDirectChannelsModal();
+        }
     }
 
     onChange() {
@@ -377,13 +387,8 @@ export default class Sidebar extends React.Component {
                 category = Constants.Preferences.CATEGORY_GROUP_CHANNEL_SHOW;
             }
 
-            AsyncClient.savePreference(
-                category,
-                id,
-                'false',
-                () => {
-                    this.isLeaving.set(channel.id, false);
-                },
+            const currentUserId = UserStore.getCurrentId();
+            savePreferences(currentUserId, [{user_id: currentUserId, category, name: id, value: 'false'}])(dispatch, getState).then(
                 () => {
                     this.isLeaving.set(channel.id, false);
                 }
@@ -515,7 +520,7 @@ export default class Sidebar extends React.Component {
             linkClass = 'active';
         }
 
-        let rowClass = 'sidebar-channel';
+        let rowClass = 'sidebar-item';
 
         var unread = false;
         if (channelMember) {
@@ -537,7 +542,7 @@ export default class Sidebar extends React.Component {
         var badge = null;
         if (channelMember) {
             if (unreadCount.mentions) {
-                badge = <span className='badge pull-right small'>{unreadCount.mentions}</span>;
+                badge = <span className='badge'>{unreadCount.mentions}</span>;
                 this.badgesActive = true;
             }
         } else if (this.state.loadingDMChannel === index && channel.type === Constants.DM_CHANNEL) {
@@ -549,17 +554,29 @@ export default class Sidebar extends React.Component {
             );
         }
 
-        if (msgCount > 0) {
+        if (unreadCount.mentions > 0) {
             rowClass += ' has-badge';
         }
 
         let displayName = channel.display_name;
 
         var icon = null;
+        const globeIcon = Constants.GLOBE_ICON_SVG;
+        const lockIcon = Constants.LOCK_ICON_SVG;
         if (channel.type === Constants.OPEN_CHANNEL) {
-            icon = <div className='status'><i className='fa fa-globe'/></div>;
+            icon = (
+                <span
+                    className='icon icon__globe'
+                    dangerouslySetInnerHTML={{__html: globeIcon}}
+                />
+            );
         } else if (channel.type === Constants.PRIVATE_CHANNEL) {
-            icon = <div className='status'><i className='fa fa-lock'/></div>;
+            icon = (
+                <span
+                    className='icon icon__lock'
+                    dangerouslySetInnerHTML={{__html: lockIcon}}
+                />
+            );
         } else if (channel.type === Constants.GM_CHANNEL) {
             displayName = ChannelUtils.buildGroupChannelName(channel.id);
             icon = <div className='status status--group'>{UserStore.getProfileListInChannel(channel.id, true).length}</div>;
@@ -584,6 +601,7 @@ export default class Sidebar extends React.Component {
         if (handleClose && !badge) {
             closeButton = (
                 <OverlayTrigger
+                    trigger={['hover', 'focus']}
                     delayShow={1000}
                     placement='top'
                     overlay={removeTooltip}
@@ -625,7 +643,7 @@ export default class Sidebar extends React.Component {
                     onClick={this.trackChannelSelectedEvent}
                 >
                     {icon}
-                    {displayName}
+                    <span className='sidebar-item__name'>{displayName}</span>
                     {badge}
                     {closeButton}
                 </Link>
@@ -639,6 +657,8 @@ export default class Sidebar extends React.Component {
     }
 
     render() {
+        const switchChannelIcon = Constants.SWITCH_CHANNEL_ICON_SVG;
+
         // Check if we have all info needed to render
         if (this.state.currentTeam == null || this.state.currentUser == null) {
             return (<div/>);
@@ -654,7 +674,7 @@ export default class Sidebar extends React.Component {
         // create elements for all 4 types of channels
         const favoriteItems = this.state.favoriteChannels.
             map((channel, index, arr) => {
-                if (channel.type === Constants.DM_CHANNEL) {
+                if (channel.type === Constants.DM_CHANNEL || channel.type === Constants.GM_CHANNEL) {
                     return this.createChannelElement(channel, index, arr, this.handleLeaveDirectChannel);
                 }
 
@@ -691,6 +711,7 @@ export default class Sidebar extends React.Component {
         var directMessageMore = (
             <li key='more'>
                 <a
+                    id='moreDirectMessage'
                     href='#'
                     onClick={this.handleOpenMoreDirectChannelsModal}
                 >
@@ -743,12 +764,13 @@ export default class Sidebar extends React.Component {
 
         let createPublicChannelIcon = (
             <OverlayTrigger
+                trigger={['hover', 'focus']}
                 delayShow={500}
-                trigger='hover'
                 placement='top'
                 overlay={createChannelTootlip}
             >
                 <a
+                    id='createPublicChannel'
                     className='add-channel-btn'
                     href='#'
                     onClick={this.showNewChannelModal.bind(this, Constants.OPEN_CHANNEL)}
@@ -760,12 +782,13 @@ export default class Sidebar extends React.Component {
 
         let createPrivateChannelIcon = (
             <OverlayTrigger
+                trigger={['hover', 'focus']}
                 delayShow={500}
                 placement='top'
-                trigger='hover'
                 overlay={createGroupTootlip}
             >
                 <a
+                    id='createPrivateChannel'
                     className='add-channel-btn'
                     href='#'
                     onClick={this.showNewChannelModal.bind(this, Constants.PRIVATE_CHANNEL)}
@@ -858,7 +881,7 @@ export default class Sidebar extends React.Component {
                             <h4>
                                 <FormattedMessage
                                     id='sidebar.favorite'
-                                    defaultMessage='Favorites'
+                                    defaultMessage='FAVORITE CHANNELS'
                                 />
                             </h4>
                         </li>
@@ -869,7 +892,7 @@ export default class Sidebar extends React.Component {
                             <h4>
                                 <FormattedMessage
                                     id='sidebar.channels'
-                                    defaultMessage='Channels'
+                                    defaultMessage='PUBLIC CHANNELS'
                                 />
                                 {createPublicChannelIcon}
                             </h4>
@@ -895,7 +918,7 @@ export default class Sidebar extends React.Component {
                             <h4>
                                 <FormattedMessage
                                     id='sidebar.pg'
-                                    defaultMessage='Private Channels'
+                                    defaultMessage='PRIVATE CHANNELS'
                                 />
                                 {createPrivateChannelIcon}
                             </h4>
@@ -907,7 +930,7 @@ export default class Sidebar extends React.Component {
                             <h4>
                                 <FormattedMessage
                                     id='sidebar.direct'
-                                    defaultMessage='Direct Messages'
+                                    defaultMessage='DIRECT MESSAGES'
                                 />
                             </h4>
                         </li>
@@ -920,6 +943,10 @@ export default class Sidebar extends React.Component {
                         className='btn btn-link'
                         onClick={this.openQuickSwitcher}
                     >
+                        <span
+                            className='icon icon__switch'
+                            dangerouslySetInnerHTML={{__html: switchChannelIcon}}
+                        />
                         <FormattedMessage
                             id={quickSwitchText}
                             defaultMessage='Switch Channels'

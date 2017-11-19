@@ -12,12 +12,9 @@ import {loadStatusesForProfilesList, loadStatusesForProfilesMap} from 'actions/s
 
 import {getDirectChannelName, getUserIdFromChannelName} from 'utils/utils.jsx';
 
-import Client from 'client/web_client.jsx';
-
 import {Constants, ActionTypes, Preferences} from 'utils/constants.jsx';
 import {browserHistory} from 'react-router/es6';
 
-// Redux actions
 import store from 'stores/redux_store.jsx';
 const dispatch = store.dispatch;
 const getState = store.getState;
@@ -26,59 +23,51 @@ import * as Selectors from 'mattermost-redux/selectors/entities/users';
 import {getBool} from 'mattermost-redux/selectors/entities/preferences';
 
 import * as UserActions from 'mattermost-redux/actions/users';
+import {Client4} from 'mattermost-redux/client';
 
 import {getClientConfig, getLicenseConfig} from 'mattermost-redux/actions/general';
 import {getTeamMembersByIds, getMyTeamMembers, getMyTeamUnreads} from 'mattermost-redux/actions/teams';
 import {getChannelAndMyMember} from 'mattermost-redux/actions/channels';
-import {savePreferences, deletePreferences} from 'mattermost-redux/actions/preferences';
+import {savePreferences as savePreferencesRedux, deletePreferences} from 'mattermost-redux/actions/preferences';
 
 import {Preferences as PreferencesRedux} from 'mattermost-redux/constants';
 
-export function loadMe(callback) {
-    UserActions.loadMe()(dispatch, getState).then(
-        () => {
-            loadCurrentLocale();
+export async function loadMe() {
+    await UserActions.loadMe()(dispatch, getState);
 
-            if (callback) {
-                callback();
-            }
-        }
-    );
+    if (window.mm_config) {
+        loadCurrentLocale();
+    }
 }
 
 export function loadMeAndConfig(callback) {
-    loadMe(() => {
-        getClientConfig()(store.dispatch, store.getState).then(
-            (config) => {
-                global.window.mm_config = config;
+    getClientConfig()(store.dispatch, store.getState).then((config) => {
+        global.window.mm_config = config;
 
-                if (global.window && global.window.analytics) {
-                    global.window.analytics.identify(global.window.mm_config.DiagnosticId, {}, {
-                        context: {
-                            ip: '0.0.0.0'
-                        },
-                        page: {
-                            path: '',
-                            referrer: '',
-                            search: '',
-                            title: '',
-                            url: ''
-                        },
-                        anonymousId: '00000000000000000000000000'
-                    });
+        if (global.window && global.window.analytics) {
+            global.window.analytics.identify(global.window.mm_config.DiagnosticId, {}, {
+                context: {
+                    ip: '0.0.0.0'
+                },
+                page: {
+                    path: '',
+                    referrer: '',
+                    search: '',
+                    title: '',
+                    url: ''
+                },
+                anonymousId: '00000000000000000000000000'
+            });
+        }
+
+        Promise.all([
+            loadMe(),
+            getLicenseConfig()(store.dispatch, store.getState).then(
+                (license) => {
+                    global.window.mm_license = license;
                 }
-
-                getLicenseConfig()(store.dispatch, store.getState).then(
-                    (license) => { // eslint-disable-line max-nested-callbacks
-                        global.window.mm_license = license;
-
-                        if (callback) {
-                            callback();
-                        }
-                    }
-                );
-            }
-        );
+            )
+        ]).then(callback);
     });
 }
 
@@ -252,7 +241,7 @@ export function loadNewDMIfNeeded(channelId) {
         if (pref === false) {
             PreferenceStore.setPreference(Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, userId, 'true');
             const currentUserId = UserStore.getCurrentId();
-            savePreferences(currentUserId, [{user_id: currentUserId, category: Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, name: userId, value: 'true'}])(dispatch, getState);
+            savePreferencesRedux(currentUserId, [{user_id: currentUserId, category: Preferences.CATEGORY_DIRECT_CHANNEL_SHOW, name: userId, value: 'true'}])(dispatch, getState);
             loadProfilesForDM();
         }
     }
@@ -277,7 +266,7 @@ export function loadNewGMIfNeeded(channelId) {
         if (pref === false) {
             PreferenceStore.setPreference(Preferences.CATEGORY_GROUP_CHANNEL_SHOW, channelId, 'true');
             const currentUserId = UserStore.getCurrentId();
-            savePreferences(currentUserId, [{user_id: currentUserId, category: Preferences.CATEGORY_GROUP_CHANNEL_SHOW, name: channelId, value: 'true'}])(dispatch, getState);
+            savePreferencesRedux(currentUserId, [{user_id: currentUserId, category: Preferences.CATEGORY_GROUP_CHANNEL_SHOW, name: channelId, value: 'true'}])(dispatch, getState);
             loadProfilesForGM();
         }
     }
@@ -338,7 +327,7 @@ export function loadProfilesForGM() {
 
     if (newPreferences.length > 0) {
         const currentUserId = UserStore.getCurrentId();
-        savePreferences(currentUserId, newPreferences)(dispatch, getState);
+        savePreferencesRedux(currentUserId, newPreferences)(dispatch, getState);
     }
 }
 
@@ -379,7 +368,7 @@ export function loadProfilesForDM() {
 
     if (newPreferences.length > 0) {
         const currentUserId = UserStore.getCurrentId();
-        savePreferences(currentUserId, newPreferences)(dispatch, getState);
+        savePreferencesRedux(currentUserId, newPreferences)(dispatch, getState);
     }
 
     if (profilesToLoad.length > 0) {
@@ -393,21 +382,18 @@ export function loadProfilesForDM() {
     }
 }
 
-export function saveTheme(teamId, theme, onSuccess, onError) {
+export function saveTheme(teamId, theme, cb) {
     const currentUserId = UserStore.getCurrentId();
-    savePreferences(currentUserId, [{
+    const preference = [{
         user_id: currentUserId,
         category: Preferences.CATEGORY_THEME,
         name: teamId,
         value: JSON.stringify(theme)
-    }])(dispatch, getState).then(
-        (data) => {
-            if (data && onSuccess) {
-                onThemeSaved(teamId, theme, onSuccess);
-            } else if (data == null && onError) {
-                const serverError = getState().requests.users.savePreferences.error;
-                onError({id: serverError.server_error_id, ...serverError});
-            }
+    }];
+
+    savePreferencesRedux(currentUserId, preference)(dispatch, getState).then(
+        () => {
+            onThemeSaved(teamId, theme, cb);
         }
     );
 }
@@ -471,7 +457,7 @@ export function searchUsersNotInTeam(term, teamId = TeamStore.getCurrentId(), op
 export function autocompleteUsersInChannel(username, channelId, success) {
     const channel = ChannelStore.get(channelId);
     const teamId = channel ? channel.team_id : TeamStore.getCurrentId();
-    UserActions.autocompleteRedux(username, teamId, channelId)(dispatch, getState).then(
+    UserActions.autocompleteUsers(username, teamId, channelId)(dispatch, getState).then(
         (data) => {
             if (success) {
                 success(data);
@@ -481,7 +467,7 @@ export function autocompleteUsersInChannel(username, channelId, success) {
 }
 
 export function autocompleteUsersInTeam(username, success) {
-    UserActions.autocompleteRedux(username, TeamStore.getCurrentId())(dispatch, getState).then(
+    UserActions.autocompleteUsers(username, TeamStore.getCurrentId())(dispatch, getState).then(
         (data) => {
             if (success) {
                 success(data);
@@ -491,7 +477,7 @@ export function autocompleteUsersInTeam(username, success) {
 }
 
 export function autocompleteUsers(username, success) {
-    UserActions.autocompleteRedux(username)(dispatch, getState).then(
+    UserActions.autocompleteUsers(username)(dispatch, getState).then(
         (data) => {
             if (success) {
                 success(data);
@@ -514,7 +500,7 @@ export function updateUser(user, type, success, error) {
 }
 
 export function generateMfaSecret(success, error) {
-    UserActions.generateMfaSecret()(dispatch, getState).then(
+    UserActions.generateMfaSecret(UserStore.getCurrentId())(dispatch, getState).then(
         (data) => {
             if (data && success) {
                 success(data);
@@ -540,7 +526,7 @@ export function updateUserNotifyProps(props, success, error) {
 }
 
 export function updateUserRoles(userId, newRoles, success, error) {
-    UserActions.updateUserRolesRedux(userId, newRoles)(dispatch, getState).then(
+    UserActions.updateUserRoles(userId, newRoles)(dispatch, getState).then(
         (data) => {
             if (data && success) {
                 success(data);
@@ -584,7 +570,7 @@ export function checkMfa(loginId, success, error) {
         return;
     }
 
-    UserActions.checkMfaRedux(loginId)(dispatch, getState).then(
+    UserActions.checkMfa(loginId)(dispatch, getState).then(
         (data) => {
             if (data != null && success) {
                 success(data);
@@ -735,32 +721,35 @@ export function webLoginByLdap(loginId, password, token, success, error) {
 }
 
 export function getAuthorizedApps(success, error) {
-    Client.getAuthorizedApps(
+    Client4.getAuthorizedOAuthApps(getState().entities.users.currentUserId).then(
         (authorizedApps) => {
             if (success) {
                 success(authorizedApps);
             }
-        },
+        }
+    ).catch(
         (err) => {
             if (error) {
                 error(err);
             }
-        });
+        }
+    );
 }
 
 export function deauthorizeOAuthApp(appId, success, error) {
-    Client.deauthorizeOAuthApp(
-        appId,
+    Client4.deauthorizeOAuthApp(appId).then(
         () => {
             if (success) {
                 success();
             }
-        },
+        }
+    ).catch(
         (err) => {
             if (error) {
                 error(err);
             }
-        });
+        }
+    );
 }
 
 export function uploadProfileImage(userPicture, success, error) {
@@ -804,6 +793,18 @@ export function loadMyTeamMembers() {
     );
 }
 
+export function savePreferences(prefs, callback) {
+    const currentUserId = UserStore.getCurrentId();
+    savePreferencesRedux(currentUserId, prefs)(dispatch, getState).then(
+        () => callback()
+    );
+}
+
+export async function savePreference(category, name, value) {
+    const currentUserId = UserStore.getCurrentId();
+    return savePreferencesRedux(currentUserId, [{user_id: currentUserId, category, name, value}])(dispatch, getState);
+}
+
 export function autoResetStatus() {
     return async (doDispatch, doGetState) => {
         const {currentUserId} = getState().entities.users;
@@ -822,4 +823,17 @@ export function autoResetStatus() {
 
         return userStatus;
     };
+}
+
+export function sendPasswordResetEmail(email, success, error) {
+    UserActions.sendPasswordResetEmail(email)(dispatch, getState).then(
+        (data) => {
+            if (data && success) {
+                success(data);
+            } else if (data == null && error) {
+                const serverError = getState().requests.users.passwordReset.error;
+                error({id: serverError.server_error_id, ...serverError});
+            }
+        }
+    );
 }

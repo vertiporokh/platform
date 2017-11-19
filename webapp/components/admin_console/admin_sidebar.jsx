@@ -529,20 +529,12 @@ export default class AdminSidebar extends React.Component {
                                 }
                             >
                                 <AdminSidebarSection
+                                    key='storage'
                                     name='storage'
                                     title={
                                         <FormattedMessage
                                             id='admin.sidebar.storage'
                                             defaultMessage='Storage'
-                                        />
-                                    }
-                                />
-                                <AdminSidebarSection
-                                    name='images'
-                                    title={
-                                        <FormattedMessage
-                                            id='admin.sidebar.images'
-                                            defaultMessage='Images'
                                         />
                                     }
                                 />
@@ -559,11 +551,11 @@ export default class AdminSidebar extends React.Component {
                             >
                                 {customBranding}
                                 <AdminSidebarSection
-                                    name='custom_emoji'
+                                    name='emoji'
                                     title={
                                         <FormattedMessage
-                                            id='admin.sidebar.customEmoji'
-                                            defaultMessage='Custom Emoji'
+                                            id='admin.sidebar.emoji'
+                                            defaultMessage='Emoji'
                                         />
 
                                     }
