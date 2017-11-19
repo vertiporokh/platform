@@ -1291,7 +1291,22 @@ func TestUserStoreGetRecentlyActiveUsersForTeam(t *testing.T) {
 	tid := model.NewId()
 	Must(store.Team().SaveMember(&model.TeamMember{TeamId: tid, UserId: u1.Id}))
 
-	if r1 := <-store.User().GetRecentlyActiveUsersForTeam(tid); r1.Err != nil {
+	if r1 := <-store.User().GetRecentlyActiveUsersForTeam(tid, 0, 100); r1.Err != nil {
+		t.Fatal(r1.Err)
+	}
+}
+
+func TestUserStoreGetNewUsersForTeam(t *testing.T) {
+	Setup()
+
+	u1 := &model.User{}
+	u1.Email = model.NewId()
+	Must(store.User().Save(u1))
+	Must(store.Status().SaveOrUpdate(&model.Status{UserId: u1.Id, Status: model.STATUS_ONLINE, Manual: false, LastActivityAt: model.GetMillis(), ActiveChannel: ""}))
+	tid := model.NewId()
+	Must(store.Team().SaveMember(&model.TeamMember{TeamId: tid, UserId: u1.Id}))
+
+	if r1 := <-store.User().GetNewUsersForTeam(tid, 0, 100); r1.Err != nil {
 		t.Fatal(r1.Err)
 	}
 }
@@ -1501,7 +1516,7 @@ func TestUserStoreSearch(t *testing.T) {
 	c1 := model.Channel{}
 	c1.TeamId = tid
 	c1.DisplayName = "NameName"
-	c1.Name = "a" + model.NewId() + "b"
+	c1.Name = "zz" + model.NewId() + "b"
 	c1.Type = model.CHANNEL_OPEN
 	c1 = *Must(store.Channel().Save(&c1)).(*model.Channel)
 

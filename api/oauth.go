@@ -41,6 +41,10 @@ func registerOAuthApp(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !app.SessionHasPermissionTo(c.Session, model.PERMISSION_MANAGE_SYSTEM) {
+		oauthApp.IsTrusted = false
+	}
+
 	oauthApp.CreatorId = c.Session.UserId
 
 	rapp, err := app.CreateOAuthApp(oauthApp)
@@ -157,7 +161,7 @@ func loginWithOAuth(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if authUrl, err := app.GetOAuthLoginEndpoint(service, teamId, model.OAUTH_ACTION_LOGIN, redirectTo, loginHint); err != nil {
+	if authUrl, err := app.GetOAuthLoginEndpoint(w, r, service, teamId, model.OAUTH_ACTION_LOGIN, redirectTo, loginHint); err != nil {
 		c.Err = err
 		return
 	} else {
@@ -180,7 +184,7 @@ func signupWithOAuth(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if authUrl, err := app.GetOAuthSignupEndpoint(service, teamId); err != nil {
+	if authUrl, err := app.GetOAuthSignupEndpoint(w, r, service, teamId); err != nil {
 		c.Err = err
 		return
 	} else {

@@ -1,8 +1,6 @@
 // Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
-import Client from 'client/web_client.jsx';
-
 import {clientLogout} from 'actions/global_actions.jsx';
 
 import store from 'stores/redux_store.jsx';
@@ -11,6 +9,8 @@ const getState = store.getState;
 
 import * as AdminActions from 'mattermost-redux/actions/admin';
 import * as UserActions from 'mattermost-redux/actions/users';
+import * as IntegrationActions from 'mattermost-redux/actions/integrations';
+import {Client4} from 'mattermost-redux/client';
 
 export function saveConfig(config, success, error) {
     AdminActions.updateConfig(config)(dispatch, getState).then(
@@ -157,13 +157,13 @@ export function ldapSyncNow(success, error) {
 }
 
 export function getOAuthAppInfo(clientId, success, error) {
-    Client.getOAuthAppInfo(
-        clientId,
+    Client4.getOAuthAppInfo(clientId).then(
         (data) => {
             if (success) {
                 success(data);
             }
-        },
+        }
+    ).catch(
         (err) => {
             if (error) {
                 error(err);
@@ -179,12 +179,13 @@ export function allowOAuth2(params, success, error) {
     const state = params.state;
     const scope = params.scope;
 
-    Client.allowOAuth2(responseType, clientId, redirectUri, state, scope,
+    Client4.authorizeOAuthApp(responseType, clientId, redirectUri, state, scope).then(
         (data) => {
             if (success) {
                 success(data);
             }
-        },
+        }
+    ).catch(
         (err) => {
             if (error) {
                 error(err);
@@ -238,16 +239,13 @@ export function oauthToEmail(currentService, email, password, success, error) {
 }
 
 export function regenerateOAuthAppSecret(oauthAppId, success, error) {
-    Client.regenerateOAuthAppSecret(
-        oauthAppId,
+    IntegrationActions.regenOAuthAppSecret(oauthAppId)(dispatch, getState).then(
         (data) => {
-            if (success) {
+            if (data && success) {
                 success(data);
-            }
-        },
-        (err) => {
-            if (error) {
-                error(err);
+            } else if (data == null && error) {
+                const serverError = getState().requests.admin.updateOAuthApp.error;
+                error({id: serverError.server_error_id, ...serverError});
             }
         }
     );
@@ -267,31 +265,26 @@ export function uploadBrandImage(brandImage, success, error) {
 }
 
 export function uploadLicenseFile(file, success, error) {
-    Client.uploadLicenseFile(
-        file,
-        () => {
-            if (success) {
-                success();
-            }
-        },
-        (err) => {
-            if (error) {
-                error(err);
+    AdminActions.uploadLicense(file)(dispatch, getState).then(
+        (data) => {
+            if (data && success) {
+                success(data);
+            } else if (data == null && error) {
+                const serverError = getState().requests.admin.uploadLicense.error;
+                error({id: serverError.server_error_id, ...serverError});
             }
         }
     );
 }
 
 export function removeLicenseFile(success, error) {
-    Client.removeLicenseFile(
-        () => {
-            if (success) {
-                success();
-            }
-        },
-        (err) => {
-            if (error) {
-                error(err);
+    AdminActions.removeLicense()(dispatch, getState).then(
+        (data) => {
+            if (data && success) {
+                success(data);
+            } else if (data == null && error) {
+                const serverError = getState().requests.admin.removeLicense.error;
+                error({id: serverError.server_error_id, ...serverError});
             }
         }
     );
@@ -373,4 +366,20 @@ export function removeIdpSamlCertificate(success, error) {
             }
         }
     );
+}
+
+export function getStandardAnalytics(teamId) {
+    AdminActions.getStandardAnalytics(teamId)(dispatch, getState);
+}
+
+export function getAdvancedAnalytics(teamId) {
+    AdminActions.getAdvancedAnalytics(teamId)(dispatch, getState);
+}
+
+export function getPostsPerDayAnalytics(teamId) {
+    AdminActions.getPostsPerDayAnalytics(teamId)(dispatch, getState);
+}
+
+export function getUsersPerDayAnalytics(teamId) {
+    AdminActions.getUsersPerDayAnalytics(teamId)(dispatch, getState);
 }

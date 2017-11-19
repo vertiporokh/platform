@@ -6,7 +6,6 @@ package app
 import (
 	"fmt"
 	"html"
-	"html/template"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -63,7 +62,10 @@ func SendNotifications(post *model.Post, team *model.Team, channel *model.Channe
 			otherUserId = userIds[0]
 		}
 
-		mentionedUserIds[otherUserId] = true
+		if _, ok := profileMap[otherUserId]; ok {
+			mentionedUserIds[otherUserId] = true
+		}
+
 		if post.Props["from_webhook"] == "true" {
 			mentionedUserIds[post.UserId] = true
 		}
@@ -401,10 +403,10 @@ func sendNotificationEmail(post *model.Post, user *model.User, channel *model.Ch
 
 	bodyPage.Props["BodyText"] = bodyText
 	bodyPage.Props["Button"] = userLocale("api.templates.post_body.button")
-	bodyPage.Html["Info"] = template.HTML(userLocale("api.templates.post_body.info",
+	bodyPage.Html["Info"] = utils.TranslateAsHtml(userLocale, "api.templates.post_body.info",
 		map[string]interface{}{"ChannelName": channelName, "SenderName": senderName,
 			"Hour": fmt.Sprintf("%02d", tm.Hour()), "Minute": fmt.Sprintf("%02d", tm.Minute()),
-			"TimeZone": zone, "Month": month, "Day": day}))
+			"TimeZone": zone, "Month": month, "Day": day})
 
 	go func() {
 		if err := utils.SendMail(user.Email, html.UnescapeString(subject), bodyPage.Render()); err != nil {
@@ -507,6 +509,15 @@ func sendPushNotification(post *model.Post, user *model.User, channel *model.Cha
 			msg.Message = senderName + userLocale("api.post.send_notifications_and_forget.push_mention") + channelName
 		} else {
 			msg.Message = senderName + userLocale("api.post.send_notifications_and_forget.push_non_mention") + channelName
+		}
+	}
+
+	// If the post only has images then push an appropriate message
+	if len(post.Message) == 0 && post.FileIds != nil && len(post.FileIds) > 0 {
+		if channel.Type == model.CHANNEL_DIRECT {
+			msg.Message = senderName + userLocale("api.post.send_notifications_and_forget.push_image_only_dm")
+		} else {
+			msg.Message = senderName + userLocale("api.post.send_notifications_and_forget.push_image_only") + channelName
 		}
 	}
 

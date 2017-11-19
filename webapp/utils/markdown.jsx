@@ -7,22 +7,6 @@ import * as SyntaxHighlighting from './syntax_highlighting.jsx';
 import marked from 'marked';
 import katex from 'katex';
 
-function markdownImageLoaded(image) {
-    if (image.hasAttribute('height') && image.attributes.height.value !== 'auto') {
-        const maxHeight = parseInt(global.getComputedStyle(image).maxHeight, 10);
-
-        if (image.attributes.height.value > maxHeight) {
-            image.style.height = maxHeight + 'px';
-            image.style.width = ((maxHeight * image.attributes.width.value) / image.attributes.height.value) + 'px';
-        } else {
-            image.style.height = image.attributes.height.value + 'px';
-        }
-    } else {
-        image.style.height = 'auto';
-    }
-}
-global.markdownImageLoaded = markdownImageLoaded;
-
 class MattermostMarkdownRenderer extends marked.Renderer {
     constructor(options, formattingOptions = {}) {
         super(options);
@@ -62,7 +46,7 @@ class MattermostMarkdownRenderer extends marked.Renderer {
         if (SyntaxHighlighting.canHighlight(usedLanguage)) {
             header = (
                 '<span class="post-code__language">' +
-                    SyntaxHighlighting.getLanguageName(language) +
+                    SyntaxHighlighting.getLanguageName(usedLanguage) +
                 '</span>'
             );
         }
@@ -151,7 +135,7 @@ class MattermostMarkdownRenderer extends marked.Renderer {
         if (dimensions.length > 1) {
             out += ' height="' + dimensions[1] + '"';
         }
-        out += ' onload="window.markdownImageLoaded(this)" onerror="window.markdownImageLoaded(this)" class="markdown-inline-img"';
+        out += ' class="markdown-inline-img"';
         out += this.options.xhtml ? '/>' : '>';
         return out;
     }

@@ -130,9 +130,6 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set(model.HEADER_REQUEST_ID, c.RequestId)
 	w.Header().Set(model.HEADER_VERSION_ID, fmt.Sprintf("%v.%v.%v.%v", model.CurrentVersion, model.BuildNumber, utils.ClientCfgHash, utils.IsLicensed))
-	if einterfaces.GetClusterInterface() != nil {
-		w.Header().Set(model.HEADER_CLUSTER_ID, einterfaces.GetClusterInterface().GetClusterId())
-	}
 
 	w.Header().Set("Content-Type", "application/json")
 
@@ -195,7 +192,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if einterfaces.GetMetricsInterface() != nil {
 		einterfaces.GetMetricsInterface().IncrementHttpRequest()
 
-		if r.URL.Path != model.API_URL_SUFFIX+"/users/websocket" {
+		if r.URL.Path != model.API_URL_SUFFIX+"/websocket" {
 			elapsed := float64(time.Since(now)) / float64(time.Second)
 			einterfaces.GetMetricsInterface().ObserveHttpRequestDuration(elapsed)
 		}
@@ -349,6 +346,17 @@ func (c *Context) RequireTeamId() *Context {
 
 	if len(c.Params.TeamId) != 26 {
 		c.SetInvalidUrlParam("team_id")
+	}
+	return c
+}
+
+func (c *Context) RequireInviteId() *Context {
+	if c.Err != nil {
+		return c
+	}
+
+	if len(c.Params.InviteId) == 0 {
+		c.SetInvalidUrlParam("invite_id")
 	}
 	return c
 }

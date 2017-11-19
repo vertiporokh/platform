@@ -9,10 +9,9 @@ import IntegrationStore from 'stores/integration_store.jsx';
 import TeamStore from 'stores/team_store.jsx';
 import UserStore from 'stores/user_store.jsx';
 
-import {loadOutgoingHooks} from 'actions/integration_actions.jsx';
+import {loadOutgoingHooks, regenOutgoingHookToken, deleteOutgoingHook} from 'actions/integration_actions.jsx';
 
 import * as Utils from 'utils/utils.jsx';
-import * as AsyncClient from 'utils/async_client.jsx';
 
 import PropTypes from 'prop-types';
 
@@ -50,7 +49,7 @@ export default class InstalledOutgoingWebhooks extends React.Component {
         UserStore.addChangeListener(this.handleUserChange);
 
         if (window.mm_config.EnableOutgoingWebhooks === 'true') {
-            loadOutgoingHooks();
+            loadOutgoingHooks(() => this.setState({loading: false}));
         }
     }
 
@@ -63,8 +62,7 @@ export default class InstalledOutgoingWebhooks extends React.Component {
         const teamId = TeamStore.getCurrentId();
 
         this.setState({
-            outgoingWebhooks: IntegrationStore.getOutgoingWebhooks(teamId),
-            loading: !IntegrationStore.hasReceivedOutgoingWebhooks(teamId)
+            outgoingWebhooks: IntegrationStore.getOutgoingWebhooks(teamId)
         });
     }
 
@@ -73,11 +71,11 @@ export default class InstalledOutgoingWebhooks extends React.Component {
     }
 
     regenOutgoingWebhookToken(outgoingWebhook) {
-        AsyncClient.regenOutgoingHookToken(outgoingWebhook.id);
+        regenOutgoingHookToken(outgoingWebhook.id);
     }
 
     deleteOutgoingWebhook(outgoingWebhook) {
-        AsyncClient.deleteOutgoingHook(outgoingWebhook.id);
+        deleteOutgoingHook(outgoingWebhook.id);
     }
 
     outgoingWebhookCompare(a, b) {
@@ -145,17 +143,29 @@ export default class InstalledOutgoingWebhooks extends React.Component {
                 helpText={
                     <FormattedMessage
                         id='installed_outgoing_webhooks.help'
-                        defaultMessage='Create outgoing webhook URLs for use in external integrations. Please see {link} to learn more.'
+                        defaultMessage='Use outgoing webhooks to connect external tools to Mattermost. {buildYourOwn} or visit the {appDirectory} to find self-hosted, third-party apps and integrations.'
                         values={{
-                            link: (
+                            buildYourOwn: (
                                 <a
                                     target='_blank'
                                     rel='noopener noreferrer'
                                     href='http://docs.mattermost.com/developer/webhooks-outgoing.html'
                                 >
                                     <FormattedMessage
-                                        id='installed_outgoing_webhooks.helpLink'
-                                        defaultMessage='documentation'
+                                        id='installed_outgoing_webhooks.help.buildYourOwn'
+                                        defaultMessage='Build your own'
+                                    />
+                                </a>
+                            ),
+                            appDirectory: (
+                                <a
+                                    target='_blank'
+                                    rel='noopener noreferrer'
+                                    href='https://about.mattermost.com/default-app-directory/'
+                                >
+                                    <FormattedMessage
+                                        id='installed_outgoing_webhooks.help.appDirectory'
+                                        defaultMessage='App Directory'
                                     />
                                 </a>
                             )

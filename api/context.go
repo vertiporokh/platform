@@ -150,9 +150,6 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set(model.HEADER_REQUEST_ID, c.RequestId)
 	w.Header().Set(model.HEADER_VERSION_ID, fmt.Sprintf("%v.%v.%v.%v", model.CurrentVersion, model.BuildNumber, utils.ClientCfgHash, utils.IsLicensed))
-	if einterfaces.GetClusterInterface() != nil {
-		w.Header().Set(model.HEADER_CLUSTER_ID, einterfaces.GetClusterInterface().GetClusterId())
-	}
 
 	// Instruct the browser not to display us in an iframe unless is the same origin for anti-clickjacking
 	if !h.isApi {
@@ -206,6 +203,10 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		splitURL := strings.Split(r.URL.Path, "/")
 		c.setTeamURL(c.GetSiteURLHeader()+"/"+splitURL[1], true)
 		c.Path = "/" + strings.Join(splitURL[2:], "/")
+	}
+
+	if h.isApi && !*utils.Cfg.ServiceSettings.EnableAPIv3 {
+		c.Err = model.NewAppError("ServeHTTP", "api.context.v3_disabled.app_error", nil, "", http.StatusNotImplemented)
 	}
 
 	if c.Err == nil && h.requireUser {
